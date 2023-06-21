@@ -31,7 +31,7 @@ RUN yay -Syu --overwrite "*" --noconfirm --noprogressbar --needed \
 USER root
 
 RUN pip install --no-cache-dir --upgrade pip \
-    pip install --no-cache-dir --upgrade yuuno setuptools
+    pip install --no-cache-dir --upgrade yuuno setuptools --break-system-packages
 
 # Hack to fix warning when seeking in %%vspreview w/ R58.                                                                                                                                                                                                                        
 # It's specific to both the line and pattern to hopefully avoid breaking anything in future versions.                                                                                                                                                                             
