@@ -6,7 +6,7 @@ RUN passwd --lock user
 RUN echo "user ALL=(ALL) NOPASSWD: /usr/bin/pacman" > /etc/sudoers.d/allow_user_to_pacman
 RUN echo "root ALL=(ALL) CWD=* ALL" > /etc/sudoers.d/permissive_root_Chdir_Spec
 
-RUN pacman -Syu --needed --noprogressbar --noconfirm base-devel git gcc ffms2 vapoursynth python-pip vim wget vapoursynth-plugin-lsmashsource && \
+RUN pacman -Syu --needed --noprogressbar --noconfirm base-devel git gcc ffms2 vapoursynth vapoursynth-plugin-bestsource vapoursynth-plugin-mvtools python-pip vim wget vapoursynth-plugin-lsmashsource && \
     pacman -Sc --noconfirm
 
 USER user
@@ -42,7 +42,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 # Hack to fix warning when seeking in %%vspreview w/ R58.                                                                                                                                                                                                                        
 # It's specific to both the line and pattern to hopefully avoid breaking anything in future versions.                                                                                                                                                                             
-RUN sed -i '223 s/prefer_props=self.extension.prefer_props.*//' /usr/lib64/python3.11/site-packages/yuuno/vs/clip.py
+RUN sed -i '223 s/prefer_props=self.extension.prefer_props.*//' /usr/lib64/python3.12/site-packages/yuuno/vs/clip.py
 WORKDIR /
 EXPOSE 8888
 CMD ["jupyter", "lab", "--allow-root", "--port=8888", "--no-browser", "--ip=0.0.0.0"]
