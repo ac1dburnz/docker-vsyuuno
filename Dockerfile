@@ -6,7 +6,18 @@ RUN passwd --lock user
 RUN echo "user ALL=(ALL) NOPASSWD: /usr/bin/pacman" > /etc/sudoers.d/allow_user_to_pacman
 RUN echo "root ALL=(ALL) CWD=* ALL" > /etc/sudoers.d/permissive_root_Chdir_Spec
 
-RUN pacman -Syu --needed --noprogressbar --noconfirm base-devel git gcc ffms2 vapoursynth vapoursynth-plugin-bestsource vapoursynth-plugin-mvtools python-pip vim wget vapoursynth-plugin-lsmashsource && \
+RUN pacman -Syu --needed --noprogressbar --noconfirm \
+        base-devel \
+        git \
+        gcc \
+        ffms2 \
+        vapoursynth \
+        vapoursynth-plugin-bestsource \
+        vapoursynth-plugin-mvtools \
+        vapoursynth-plugin-lsmashsource-git \
+        python-pip \
+        vim \
+        wget && \
     pacman -Sc --noconfirm
 
 USER user
