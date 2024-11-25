@@ -14,7 +14,6 @@ RUN pacman -Syu --needed --noprogressbar --noconfirm \
         vapoursynth \
         vapoursynth-plugin-bestsource \
         vapoursynth-plugin-mvtools \
-        vapoursynth-plugin-lsmashsource-git \
         python-pip \
         vim \
         wget && \
@@ -43,7 +42,8 @@ RUN yay -Syu --overwrite "*" --noconfirm --noprogressbar --needed \
     vapoursynth-plugin-imwri-git \
     vapoursynth-plugin-misc-git \
     vapoursynth-plugin-ocr-git \
-    vapoursynth-plugin-vivtc-git && \
+    vapoursynth-plugin-vivtc-git \
+    vapoursynth-plugin-lsmashsource-git && \
     yay -Sc --noconfirm
 
 USER root
