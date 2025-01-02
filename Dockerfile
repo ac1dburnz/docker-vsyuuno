@@ -51,9 +51,6 @@ USER root
 RUN pip install --no-cache-dir --upgrade pip --break-system-packages && \
     pip install --no-cache-dir --upgrade yuuno setuptools --break-system-packages
 
-# Hack to fix warning when seeking in %%vspreview w/ R58.                                                                                                                                                                                                                        
-# It's specific to both the line and pattern to hopefully avoid breaking anything in future versions.                                                                                                                                                                             
-RUN sed -i '223 s/prefer_props=self.extension.prefer_props.*//' /usr/lib64/python3.12/site-packages/yuuno/vs/clip.py
 WORKDIR /
 EXPOSE 8888
 CMD ["jupyter", "lab", "--allow-root", "--port=8888", "--no-browser", "--ip=0.0.0.0"]
