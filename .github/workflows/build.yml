@@ -18,31 +18,46 @@ on:
     paths-ignore:
       - '**.md'
 
+env:
+  IMAGE_NAME: ghcr.io/ac1dburnz/docker-vsyuuno
+
 jobs:
-  git-only:
+  build-and-push:
     runs-on: ubuntu-latest
     timeout-minutes: 480
     steps:
-      # 1. Checkout the master branch properly
-      - name: Checkout master
+      # 1. Checkout the repository
+      - name: Checkout code
         uses: actions/checkout@v4
+
+      # 2. Log in to GitHub Container Registry
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
         with:
-          repository: ac1dburnz/docker-vsyuuno
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: master  # ensures we are on master, not detached HEAD
-          fetch-depth: 0 # fetch full history, needed for push
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 2. Configure Git user for commits
-      - name: Configure Git
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+      # 3. Set up Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      # 3. Add, commit, and push changes (if any)
-      - name: Commit and push changes
+      # 4. Build and push Docker image
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # 5. Inspect pushed image (optional)
+      - name: Inspect image
         run: |
-          git add .
-          git diff --cached --quiet || git commit -m "Automated commit from workflow"
-          git push origin master
+          docker pull ${{ env.IMAGE_NAME }}:latest
+          docker image inspect ${{ env.IMAGE_NAME }}:latest
 
 
