@@ -48,11 +48,39 @@ RUN yay -Syu --overwrite "*" --noconfirm --noprogressbar --needed \
     vapoursynth-plugin-lsmashsource-git && \
     yay -Sc --noconfirm
 
-USER root
+# -----------------------------
+# Install vs-jetpack
+# -----------------------------
+RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git /tmp/vs-jetpack && \
+    cd /tmp/vs-jetpack && \
+    pip install --no-cache-dir . --break-system-packages && \
+    python -m vsjetpack --help || true
 
+# -----------------------------
+# Install vs-muxtools
+# -----------------------------
+RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git /tmp/vs-muxtools && \
+    cd /tmp/vs-muxtools/vsmuxtools && \
+    pip install --no-cache-dir . --break-system-packages && \
+    python -m vsmuxtools --help || true
+
+# -----------------------------
+# Install your Python project
+# -----------------------------
+USER root
 RUN pip install --no-cache-dir --upgrade pip --break-system-packages && \
     pip install --no-cache-dir --upgrade yuuno setuptools --break-system-packages
 
+# -----------------------------
+# Install JupyterLab (if needed)
+# -----------------------------
+RUN pip install --no-cache-dir jupyterlab --break-system-packages
+
+# -----------------------------
+# Final setup and cleanup
+# -----------------------------
 WORKDIR /
+RUN rm -rf /tmp/yay /tmp/vs-jetpack /tmp/vs-muxtools /root/.cache /home/user/.cache
+
 EXPOSE 8888
 CMD ["jupyter", "lab", "--allow-root", "--port=8888", "--no-browser", "--ip=0.0.0.0"]
