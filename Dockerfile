@@ -5,7 +5,7 @@ FROM archlinux:latest
 # -----------------------------
 RUN pacman -Syu --needed --noconfirm \
         sudo git base-devel python python-pip ffms2 vim wget gcc \
-        vapoursynth python-vapoursynth ffmpeg x264 libaudioop \
+        vapoursynth ffmpeg x264 \
     && pacman -Sc --noconfirm
 
 RUN useradd -m -d /home/user -s /bin/bash user \
@@ -48,7 +48,7 @@ RUN yay -Syu --overwrite "*" --needed --noconfirm \
     yay -Sc --noconfirm
 
 # -----------------------------
-# Install vs-jetpack and vs-muxtools directly via pip+git
+# Install vs-jetpack and vs-muxtools via pip+git
 # -----------------------------
 RUN pip install --no-cache-dir git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git
 RUN pip install --no-cache-dir git+https://github.com/Jaded-Encoding-Thaumaturgy/muxtools.git
@@ -87,4 +87,3 @@ RUN rm -rf /tmp/* /var/cache/pacman/pkg/* /root/.cache /home/user/.cache
 # -----------------------------
 EXPOSE 8888
 CMD ["jupyter", "lab", "--allow-root", "--port=8888", "--no-browser", "--ip=0.0.0.0"]
-
