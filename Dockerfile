@@ -21,7 +21,9 @@ RUN pacman -Syu --needed --noprogressbar --noconfirm \
 
 USER user
 WORKDIR /tmp
-RUN git clone https://aur.archlinux.org/yay.git && \
+RUN for i in 1 2 3 4 5; do \
+      git clone https://aur.archlinux.org/yay.git && break || sleep 5; \
+    done && \
     cd yay && \
     makepkg --noconfirm --noprogressbar -si && \
     yay --afterclean --removemake --save && cd -
