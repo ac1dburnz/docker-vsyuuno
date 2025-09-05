@@ -48,16 +48,16 @@ RUN yay -Syu --overwrite "*" --needed --noconfirm \
     yay -Sc --noconfirm
 
 # -----------------------------
-# Install vs-jetpack and vs-muxtools via pip+git
+# Install vs-jetpack and vs-muxtools via pip + git
 # -----------------------------
-RUN pip install --no-cache-dir git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git
-RUN pip install --no-cache-dir git+https://github.com/Jaded-Encoding-Thaumaturgy/muxtools.git
-RUN pip install --no-cache-dir git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git
+USER root
+RUN pip install --no-cache-dir --break-system-packages git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git
+RUN pip install --no-cache-dir --break-system-packages git+https://github.com/Jaded-Encoding-Thaumaturgy/muxtools.git
+RUN pip install --no-cache-dir --break-system-packages git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git
 
 # -----------------------------
 # Install Python packages (yuuno, JupyterLab)
 # -----------------------------
-USER root
 RUN pip install --no-cache-dir --upgrade pip setuptools yuuno jupyterlab --break-system-packages
 
 # -----------------------------
