@@ -1,86 +1,90 @@
 FROM archlinux:latest
 
-RUN pacman -Syu --needed --noconfirm sudo
-RUN useradd user --system --shell /bin/bash --create-home --home-dir /var/user
-RUN passwd --lock user
-RUN echo "user ALL=(ALL) NOPASSWD: /usr/bin/pacman" > /etc/sudoers.d/allow_user_to_pacman
-RUN echo "root ALL=(ALL) CWD=* ALL" > /etc/sudoers.d/permissive_root_Chdir_Spec
+# -----------------------------
+# Base system + user
+# -----------------------------
+RUN pacman -Syu --needed --noconfirm \
+        sudo git base-devel python python-pip ffms2 vim wget gcc \
+        vapoursynth python-vapoursynth ffmpeg x264 libaudioop \
+    && pacman -Sc --noconfirm
 
-RUN pacman -Syu --needed --noprogressbar --noconfirm \
-        base-devel \
-        git \
-        gcc \
-        ffms2 \
-        vapoursynth \
-        vapoursynth-plugin-bestsource \
-        vapoursynth-plugin-mvtools \
-        python-pip \
-        vim \
-        wget && \
-    pacman -Sc --noconfirm
+RUN useradd -m -d /home/user -s /bin/bash user \
+    && passwd --lock user \
+    && echo "user ALL=(ALL) NOPASSWD: /usr/bin/pacman" > /etc/sudoers.d/allow_user_pacman \
+    && echo "root ALL=(ALL) CWD=* ALL" > /etc/sudoers.d/permissive_root_chdir
 
 USER user
 WORKDIR /tmp
-RUN for i in 1 2 3 4 5; do \
-      git clone https://aur.archlinux.org/yay.git && break || sleep 5; \
-    done && \
-    cd yay && \
-    makepkg --noconfirm --noprogressbar -si && \
-    yay --afterclean --removemake --save && cd -
 
+# -----------------------------
+# Install yay (AUR helper)
+# -----------------------------
+RUN git clone https://aur.archlinux.org/yay.git /tmp/yay && \
+    cd /tmp/yay && \
+    makepkg -si --noconfirm --noprogressbar && \
+    cd /tmp && rm -rf /tmp/yay
 
-# install vapoursynth plugins                                                                                                                                                                                                                                                    
-RUN yay -Syu --overwrite "*" --noconfirm --noprogressbar --needed \
-    vapoursynth-plugin-removegrain-git \
-    vapoursynth-plugin-rekt-git \
-    vapoursynth-plugin-remapframes-git \
-    vapoursynth-plugin-fillborders-git \
-    vapoursynth-plugin-havsfunc-git \
-    vapoursynth-plugin-awsmfunc-git \
-    vapoursynth-plugin-eedi3m-git \
-    vapoursynth-plugin-continuityfixer-git \
-    vapoursynth-plugin-d2vsource-git \
-    vapoursynth-plugin-subtext-git \
-    vapoursynth-plugin-imwri-git \
-    vapoursynth-plugin-misc-git \
-    vapoursynth-plugin-ocr-git \
-    vapoursynth-plugin-vivtc-git \
-    vapoursynth-plugin-lsmashsource-git && \
+# -----------------------------
+# Install VapourSynth plugins from AUR
+# -----------------------------
+RUN yay -Syu --overwrite "*" --needed --noconfirm \
+        vapoursynth-plugin-bestsource-git \
+        vapoursynth-plugin-mvtools-git \
+        vapoursynth-plugin-removegrain-git \
+        vapoursynth-plugin-rekt-git \
+        vapoursynth-plugin-remapframes-git \
+        vapoursynth-plugin-fillborders-git \
+        vapoursynth-plugin-havsfunc-git \
+        vapoursynth-plugin-awsmfunc-git \
+        vapoursynth-plugin-eedi3m-git \
+        vapoursynth-plugin-continuityfixer-git \
+        vapoursynth-plugin-d2vsource-git \
+        vapoursynth-plugin-subtext-git \
+        vapoursynth-plugin-imwri-git \
+        vapoursynth-plugin-misc-git \
+        vapoursynth-plugin-ocr-git \
+        vapoursynth-plugin-vivtc-git \
+        vapoursynth-plugin-lsmashsource-git && \
     yay -Sc --noconfirm
 
 # -----------------------------
-# Install vs-jetpack
+# Install vs-jetpack and vs-muxtools directly via pip+git
 # -----------------------------
-RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git /tmp/vs-jetpack && \
-    cd /tmp/vs-jetpack && \
-    pip install --no-cache-dir . --break-system-packages && \
-    python -m vsjetpack --help || true
+RUN pip install --no-cache-dir git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git
+RUN pip install --no-cache-dir git+https://github.com/Jaded-Encoding-Thaumaturgy/muxtools.git
+RUN pip install --no-cache-dir git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git
 
 # -----------------------------
-# Install vs-muxtools
-# -----------------------------
-RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git /tmp/vs-muxtools && \
-    cd /tmp/vs-muxtools/vsmuxtools && \
-    pip install --no-cache-dir . --break-system-packages && \
-    python -m vsmuxtools --help || true
-
-# -----------------------------
-# Install your Python project
+# Install Python packages (yuuno, JupyterLab)
 # -----------------------------
 USER root
-RUN pip install --no-cache-dir --upgrade pip --break-system-packages && \
-    pip install --no-cache-dir --upgrade yuuno setuptools --break-system-packages
+RUN pip install --no-cache-dir --upgrade pip setuptools yuuno jupyterlab --break-system-packages
 
 # -----------------------------
-# Install JupyterLab (if needed)
+# Add test VapourSynth script & notebook
 # -----------------------------
-RUN pip install --no-cache-dir jupyterlab --break-system-packages
+USER user
+WORKDIR /home/user/test
+
+# Simple test.vpy script
+RUN echo 'import vapoursynth as vs\n\
+core = vs.core\n\
+clip = core.std.BlankClip(width=1280, height=720, length=240, fpsnum=24, fpsden=1, color=[128])\n\
+clip = core.text.Text(clip, "Hello VapourSynth in Docker!")\n\
+clip.set_output()' > test.vpy
+
+# Simple test Jupyter notebook
+RUN echo '{"cells":[{"cell_type":"code","metadata":{},"source":["!vspipe /home/user/test/test.vpy - | ffmpeg -y -i - -c:v libx264 -preset veryfast -crf 18 output.mp4"],"execution_count":null,"outputs":[]}],"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"}},"nbformat":4,"nbformat_minor":5}' > test_vapoursynth.ipynb
 
 # -----------------------------
-# Final setup and cleanup
+# Cleanup
 # -----------------------------
 WORKDIR /
-RUN rm -rf /tmp/yay /tmp/vs-jetpack /tmp/vs-muxtools /root/.cache /home/user/.cache
+RUN rm -rf /tmp/* /var/cache/pacman/pkg/* /root/.cache /home/user/.cache
 
+# -----------------------------
+# Expose Jupyter and run
+# -----------------------------
 EXPOSE 8888
 CMD ["jupyter", "lab", "--allow-root", "--port=8888", "--no-browser", "--ip=0.0.0.0"]
+
