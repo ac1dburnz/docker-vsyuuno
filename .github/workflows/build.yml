@@ -6,7 +6,7 @@ concurrency:
 
 on:
   schedule:
-    - cron: '0 8 */6 * *' # every 6 days to keep cache
+    - cron: '0 8 */6 * *' # every 6 days
   push:
     branches:
       - 'master'
@@ -19,22 +19,30 @@ on:
       - '**.md'
 
 jobs:
-  build:
+  git-only:
     runs-on: ubuntu-latest
     timeout-minutes: 480
     steps:
-      - name: Checkout
+      # 1. Checkout the master branch properly
+      - name: Checkout master
         uses: actions/checkout@v4
         with:
           repository: ac1dburnz/docker-vsyuuno
           token: ${{ secrets.GITHUB_TOKEN }}
-      
-      # Optional: If you want to commit/push changes back to the repo
-      - name: Commit and push changes
+          ref: master  # ensures we are on master, not detached HEAD
+          fetch-depth: 0 # fetch full history, needed for push
+
+      # 2. Configure Git user for commits
+      - name: Configure Git
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      # 3. Add, commit, and push changes (if any)
+      - name: Commit and push changes
+        run: |
           git add .
-          git commit -m "Automated commit from workflow" || echo "No changes to commit"
+          git diff --cached --quiet || git commit -m "Automated commit from workflow"
           git push origin master
+
 
