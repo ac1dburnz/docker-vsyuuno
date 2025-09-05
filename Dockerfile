@@ -48,7 +48,7 @@ RUN yay -Syu --overwrite "*" --needed --noconfirm \
     yay -Sc --noconfirm
 
 # -----------------------------
-# Install vs-jetpack and vs-muxtools via pip + git
+# Install vs-jetpack and vs-muxtools via pip+git
 # -----------------------------
 USER root
 RUN pip install --no-cache-dir --break-system-packages git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git
@@ -79,11 +79,14 @@ RUN echo '{"cells":[{"cell_type":"code","metadata":{},"source":["!vspipe /home/u
 # -----------------------------
 # Cleanup
 # -----------------------------
-WORKDIR /
-RUN rm -rf /tmp/* /var/cache/pacman/pkg/* /root/.cache /home/user/.cache
+USER root
+RUN pacman -Scc --noconfirm && \
+    rm -rf /tmp/* /root/.cache /home/user/.cache || true
 
 # -----------------------------
 # Expose Jupyter and run
 # -----------------------------
+WORKDIR /home/user
 EXPOSE 8888
 CMD ["jupyter", "lab", "--allow-root", "--port=8888", "--no-browser", "--ip=0.0.0.0"]
+
