@@ -15,12 +15,21 @@ USER user
 WORKDIR /home/user
 
 # -----------------------------
-# Install yay for AUR packages
+# Install yay (AUR helper) with retries
 # -----------------------------
-RUN git clone https://aur.archlinux.org/yay.git /tmp/yay && \
+USER user
+WORKDIR /tmp
+
+# Retry cloning yay up to 5 times
+RUN set -e; \
+    for i in 1 2 3 4 5; do \
+        echo "Attempt $i to clone yay..."; \
+        git clone https://aur.archlinux.org/yay.git /tmp/yay && break || sleep 5; \
+    done; \
     cd /tmp/yay && \
-    makepkg -si --noconfirm && \
-    cd /home/user && rm -rf /tmp/yay
+    makepkg --noconfirm -si && \
+    cd /home/user && \
+    rm -rf /tmp/yay
 
 # -----------------------------
 # Install VapourSynth + plugins
