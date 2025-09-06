@@ -1,118 +1,93 @@
 FROM archlinux:latest
 
 # -----------------------------
-# Base system & user
+# Base system + user
 # -----------------------------
-RUN pacman -Syu --needed --noconfirm sudo git base-devel vim wget python-pip gcc && \
-    pacman -Sc --noconfirm
+RUN pacman -Syu --needed --noconfirm \
+        sudo git base-devel python python-pip ffms2 vim wget gcc \
+        vapoursynth ffmpeg x264 x265 lame flac opus-tools sox \
+        aacgain faac \
+    && pacman -Sc --noconfirm
 
-RUN useradd user --system --shell /bin/bash --create-home --home-dir /var/user
-RUN passwd --lock user
-RUN echo "user ALL=(ALL) NOPASSWD: /usr/bin/pacman" > /etc/sudoers.d/allow_user_to_pacman
-RUN echo "root ALL=(ALL) CWD=* ALL" > /etc/sudoers.d/permissive_root_Chdir_Spec
-
-# -----------------------------
-# Install essential packages
-# -----------------------------
-RUN pacman -Syu --needed --noprogressbar --noconfirm \
-        ffms2 \
-        vapoursynth \
-        vapoursynth-plugin-bestsource \
-        vapoursynth-plugin-mvtools \
-        python-pip \
-        wget \
-        git \
-        base-devel \
-        gcc \
-        vim && \
-    pacman -Sc --noconfirm
+RUN useradd -m -d /home/user -s /bin/bash user \
+    && passwd --lock user \
+    && echo "user ALL=(ALL) NOPASSWD: /usr/bin/pacman" > /etc/sudoers.d/allow_user_pacman \
+    && echo "root ALL=(ALL) CWD=* ALL" > /etc/sudoers.d/permissive_root_chdir
 
 USER user
 WORKDIR /tmp
 
 # -----------------------------
-# Install yay with retries
+# Install yay (AUR helper)
 # -----------------------------
-RUN set -e; \
-    for i in 1 2 3 4 5; do \
-        echo "Attempt $i to clone yay..."; \
-        git clone https://aur.archlinux.org/yay.git && break || sleep 5; \
-    done; \
-    cd yay && \
-    makepkg --noconfirm --noprogressbar -si && \
-    yay --afterclean --removemake --save && cd -
+RUN git clone https://aur.archlinux.org/yay.git /tmp/yay && \
+    cd /tmp/yay && \
+    makepkg -si --noconfirm --noprogressbar && \
+    cd /tmp && rm -rf /tmp/yay
 
 # -----------------------------
 # Install VapourSynth plugins from AUR
 # -----------------------------
-RUN yay -Syu --overwrite "*" --noconfirm --noprogressbar --needed \
-    vapoursynth-plugin-removegrain-git \
-    vapoursynth-plugin-rekt-git \
-    vapoursynth-plugin-remapframes-git \
-    vapoursynth-plugin-fillborders-git \
-    vapoursynth-plugin-havsfunc-git \
-    vapoursynth-plugin-awsmfunc-git \
-    vapoursynth-plugin-eedi3m-git \
-    vapoursynth-plugin-continuityfixer-git \
-    vapoursynth-plugin-d2vsource-git \
-    vapoursynth-plugin-subtext-git \
-    vapoursynth-plugin-imwri-git \
-    vapoursynth-plugin-misc-git \
-    vapoursynth-plugin-ocr-git \
-    vapoursynth-plugin-vivtc-git \
-    vapoursynth-plugin-lsmashsource-git && \
+RUN yay -Syu --overwrite "*" --needed --noconfirm \
+        vapoursynth-plugin-bestsource-git \
+        vapoursynth-plugin-mvtools-git \
+        vapoursynth-plugin-removegrain-git \
+        vapoursynth-plugin-rekt-git \
+        vapoursynth-plugin-remapframes-git \
+        vapoursynth-plugin-fillborders-git \
+        vapoursynth-plugin-havsfunc-git \
+        vapoursynth-plugin-awsmfunc-git \
+        vapoursynth-plugin-eedi3m-git \
+        vapoursynth-plugin-continuityfixer-git \
+        vapoursynth-plugin-d2vsource-git \
+        vapoursynth-plugin-subtext-git \
+        vapoursynth-plugin-imwri-git \
+        vapoursynth-plugin-misc-git \
+        vapoursynth-plugin-ocr-git \
+        vapoursynth-plugin-vivtc-git \
+        vapoursynth-plugin-lsmashsource-git && \
     yay -Sc --noconfirm
 
 # -----------------------------
-# Install vs-jetpack
-# -----------------------------
-RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git /tmp/vs-jetpack && \
-    cd /tmp/vs-jetpack && \
-    pip install --no-cache-dir . --break-system-packages && \
-    python -m vsjetpack --help || true
-
-# -----------------------------
-# Install vs-muxtools
-# -----------------------------
-RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git /tmp/vs-muxtools && \
-    cd /tmp/vs-muxtools/vsmuxtools && \
-    pip install --no-cache-dir . --break-system-packages && \
-    python -m vsmuxtools --help || true
-
-# -----------------------------
-# Install Deew, MKVToolNix GUI, other remuxers
-# -----------------------------
-RUN yay -S --noconfirm --needed \
-    deew-git \
-    mkvtoolnix-gui \
-    ffmpeg \
-    lame \
-    flac \
-    x264 \
-    x265 \
-    aacgain \
-    faac \
-    opus-tools \
-    sox
-
-# -----------------------------
-# Install Python projects
+# Install vs-jetpack, vs-muxtools, Deew, mkvtoolnix-gui
 # -----------------------------
 USER root
-RUN pip install --no-cache-dir --upgrade pip --break-system-packages && \
-    pip install --no-cache-dir --upgrade yuuno setuptools --break-system-packages
+RUN pip install --no-cache-dir --break-system-packages git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git \
+    git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git \
+    yuuno jupyterlab
+
+RUN yay -S --noconfirm --needed \
+        deew-git \
+        mkvtoolnix-gui \
+        eac3to \
+        qaac
 
 # -----------------------------
-# Install JupyterLab
+# Setup test VapourSynth script & notebook
 # -----------------------------
-RUN pip install --no-cache-dir jupyterlab --break-system-packages
+USER user
+WORKDIR /home/user/test
+
+# Simple test.vpy script
+RUN echo 'import vapoursynth as vs\n\
+core = vs.core\n\
+clip = core.std.BlankClip(width=1280, height=720, length=240, fpsnum=24, fpsden=1, color=[128])\n\
+clip = core.text.Text(clip, "Hello VapourSynth in Docker!")\n\
+clip.set_output()' > test.vpy
+
+# Simple Jupyter notebook to run the test script
+RUN echo '{"cells":[{"cell_type":"code","metadata":{},"source":["!vspipe /home/user/test/test.vpy - | ffmpeg -y -i - -c:v libx264 -preset veryfast -crf 18 output.mp4"],"execution_count":null,"outputs":[]}],"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"}},"nbformat":4,"nbformat_minor":5}' > test_vapoursynth.ipynb
 
 # -----------------------------
-# Final cleanup
+# Cleanup unnecessary files
 # -----------------------------
-WORKDIR /
-RUN rm -rf /tmp/yay /tmp/vs-jetpack /tmp/vs-muxtools /root/.cache /home/user/.cache
+USER root
+RUN pacman -Scc --noconfirm && \
+    rm -rf /tmp/* /root/.cache /home/user/.cache || true
 
+# -----------------------------
+# Expose Jupyter and run
+# -----------------------------
+WORKDIR /home/user
 EXPOSE 8888
-
 CMD ["jupyter", "lab", "--allow-root", "--port=8888", "--no-browser", "--ip=0.0.0.0"]
