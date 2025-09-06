@@ -1,22 +1,21 @@
 FROM archlinux:latest
 
 # -----------------------------
-# System setup
+# SYSTEM SETUP
 # -----------------------------
-RUN pacman -Syu --needed --noconfirm sudo git base-devel wget vim python-pip \
-    ffmpeg mkvtoolnix-cli mkvtoolnix-gui && \
+RUN pacman -Syu --needed --noconfirm sudo git base-devel vim wget curl xorg-xhost xorg-xrandr xorg-xset xorg-xdpyinfo \
+    gtk3 qt5-base python python-pip ffmpeg lame flac opus-tools && \
     pacman -Sc --noconfirm
 
 # Create user
-RUN useradd user --system --shell /bin/bash --create-home --home-dir /home/user
-RUN passwd --lock user
-RUN echo "user ALL=(ALL) NOPASSWD: /usr/bin/pacman" > /etc/sudoers.d/allow_user_to_pacman
+RUN useradd -m -s /bin/bash user && passwd -l user
+RUN echo "user ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/user
 
 USER user
 WORKDIR /home/user
 
 # -----------------------------
-# AUR helper (yay)
+# Install yay for AUR packages
 # -----------------------------
 RUN git clone https://aur.archlinux.org/yay.git /tmp/yay && \
     cd /tmp/yay && \
@@ -24,68 +23,73 @@ RUN git clone https://aur.archlinux.org/yay.git /tmp/yay && \
     cd /home/user && rm -rf /tmp/yay
 
 # -----------------------------
-# Install VapourSynth + Plugins
+# Install VapourSynth + plugins
 # -----------------------------
-RUN sudo pacman -Syu --needed --noprogressbar --noconfirm vapoursynth \
-    vapoursynth-plugin-bestsource vapoursynth-plugin-mvtools ffms2 && \
-    yay -Syu --overwrite "*" --noconfirm \
-    vapoursynth-plugin-removegrain-git \
-    vapoursynth-plugin-rekt-git \
-    vapoursynth-plugin-remapframes-git \
-    vapoursynth-plugin-fillborders-git \
-    vapoursynth-plugin-havsfunc-git \
-    vapoursynth-plugin-awsmfunc-git \
-    vapoursynth-plugin-eedi3m-git \
-    vapoursynth-plugin-continuityfixer-git \
-    vapoursynth-plugin-d2vsource-git \
-    vapoursynth-plugin-subtext-git \
-    vapoursynth-plugin-imwri-git \
-    vapoursynth-plugin-misc-git \
-    vapoursynth-plugin-ocr-git \
-    vapoursynth-plugin-vivtc-git \
-    vapoursynth-plugin-lsmashsource-git \
-    dee-git \
-    && yay -Sc --noconfirm
+RUN sudo pacman -Syu --needed --noconfirm vapoursynth ffms2 python-pip && \
+    yay -S --needed --noconfirm \
+        vapoursynth-plugin-bestsource \
+        vapoursynth-plugin-mvtools \
+        vapoursynth-plugin-removegrain-git \
+        vapoursynth-plugin-rekt-git \
+        vapoursynth-plugin-remapframes-git \
+        vapoursynth-plugin-fillborders-git \
+        vapoursynth-plugin-havsfunc-git \
+        vapoursynth-plugin-awsmfunc-git \
+        vapoursynth-plugin-eedi3m-git \
+        vapoursynth-plugin-continuityfixer-git \
+        vapoursynth-plugin-d2vsource-git \
+        vapoursynth-plugin-subtext-git \
+        vapoursynth-plugin-imwri-git \
+        vapoursynth-plugin-misc-git \
+        vapoursynth-plugin-ocr-git \
+        vapoursynth-plugin-vivtc-git \
+        vapoursynth-plugin-lsmashsource-git
 
 # -----------------------------
-# Python tools
+# Install vs-jetpack & vs-muxtools
 # -----------------------------
-RUN pip install --no-cache-dir --upgrade pip --break-system-packages
-RUN pip install --no-cache-dir yuuno jupyterlab --break-system-packages
+RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git /home/user/vs-jetpack && \
+    cd /home/user/vs-jetpack && \
+    pip install --user . --break-system-packages
+
+RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git /home/user/vs-muxtools && \
+    cd /home/user/vs-muxtools/vsmuxtools && \
+    pip install --user . --break-system-packages
 
 # -----------------------------
-# Clone VS & Encoding tools
+# Install DEEW, MKVToolNix GUI, EAC3to, QAAC alternatives
 # -----------------------------
-RUN mkdir -p /home/user/tools /home/user/encode-scripts
-
-WORKDIR /home/user/tools
-RUN git clone https://github.com/Irrational-Encoding-Wizardry/vs-preview.git
-RUN git clone https://github.com/YomikoR/VapourSynth-Editor.git
-RUN git clone https://github.com/quietvoid/vspreview-rs.git
-RUN git clone https://github.com/yuuno-project/yuuno.git
-RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git
-RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git
-
-WORKDIR /home/user/encode-scripts
-RUN git clone https://github.com/Ichunjo/encode-scripts.git
-RUN git clone https://github.com/LightArrowsEXE/Encoding-Projects.git
-RUN git clone https://github.com/Setsugennoao/Encoding-Scripts.git
-RUN git clone https://github.com/RivenSkaye/Encoding-Progress.git
-RUN git clone https://github.com/Moelancholy/Encode-Scripts.git
+RUN yay -S --needed --noconfirm deew-git mkvtoolnix-gui eac3to-git
 
 # -----------------------------
-# Setup helper scripts
+# Clone helpful encoding repos
 # -----------------------------
-WORKDIR /home/user
-RUN mkdir -p helpers
-COPY helpers/menu.sh helpers/menu.sh
-RUN chmod +x helpers/menu.sh
+RUN git clone https://github.com/Irrational-Encoding-Wizardry/vspreview.git /home/user/vspreview && \
+    git clone https://github.com/YomikoR/VapourSynth-Editor.git /home/user/vsedit && \
+    git clone https://github.com/LightArrowsEXE/Encoding-Projects.git /home/user/encode-scripts
+
+# -----------------------------
+# Install JupyterLab + Yuuno
+# -----------------------------
+RUN pip install --user --break-system-packages jupyterlab yuuno setuptools
+
+# -----------------------------
+# Supervisord setup
+# -----------------------------
+USER root
+RUN pacman -S --needed --noconfirm supervisor
+COPY supervisord.conf /etc/supervisord.conf
 
 # -----------------------------
 # Cleanup
 # -----------------------------
-RUN rm -rf /tmp/* /root/.cache /home/user/.cache
+RUN rm -rf /tmp/* /var/cache/pacman/pkg/*
 
-EXPOSE 8888
+# -----------------------------
+# Expose ports for JupyterLab/Yuuno and VNC if used
+# -----------------------------
+EXPOSE 8888 5900
 
-CMD ["/home/user/helpers/menu.sh"]
+USER user
+WORKDIR /home/user
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
