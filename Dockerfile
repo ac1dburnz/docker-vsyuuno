@@ -1,6 +1,3 @@
-# -----------------------------
-# Base image
-# -----------------------------
 FROM archlinux:latest
 
 # -----------------------------
@@ -8,7 +5,8 @@ FROM archlinux:latest
 # -----------------------------
 RUN pacman -Syu --needed --noconfirm \
         sudo git base-devel python python-pip ffms2 vim wget gcc \
-        vapoursynth ffmpeg x264 x265 lame flac opus-tools sox faac \
+        vapoursynth ffmpeg x264 x265 lame flac opus-tools sox \
+        mplayer mpv deew mkvtoolnix-gui \
     && pacman -Sc --noconfirm
 
 RUN useradd -m -d /home/user -s /bin/bash user \
@@ -51,32 +49,42 @@ RUN yay -Syu --overwrite "*" --needed --noconfirm \
     yay -Sc --noconfirm
 
 # -----------------------------
-# Install vs-jetpack and vs-muxtools via pip+git
+# Install Python tools via pip+git
 # -----------------------------
 USER root
 RUN pip install --no-cache-dir --break-system-packages git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git
 RUN pip install --no-cache-dir --break-system-packages git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git
+RUN pip install --no-cache-dir --break-system-packages yuuno jupyterlab --upgrade --break-system-packages
 
 # -----------------------------
-# Install Python packages (yuuno, JupyterLab)
-# -----------------------------
-RUN pip install --no-cache-dir --upgrade pip setuptools yuuno jupyterlab --break-system-packages
-
-# -----------------------------
-# Add test VapourSynth script & notebook
+# Clone encoding scripts & docs
 # -----------------------------
 USER user
+RUN mkdir -p /home/user/repos /home/user/docs
+WORKDIR /home/user/repos
+
+# VapourSynth encode scripts
+RUN git clone https://git.concertos.live/OpusGang/EncodeScripts.git && \
+    git clone https://github.com/Ichunjo/encode-scripts.git && \
+    git clone https://github.com/LightArrowsEXE/Encoding-Projects.git && \
+    git clone https://github.com/Beatrice-Raws/encode-scripts.git && \
+    git clone https://github.com/Setsugennoao/Encoding-Scripts.git && \
+    git clone https://github.com/RivenSkaye/Encoding-Progress.git && \
+    git clone https://github.com/Moelancholy/Encode-Scripts.git
+
+# Download guides/docs
+WORKDIR /home/user/docs
+RUN wget -O vs_scriptorium.html https://silentaperture.gitlab.io/mdbook-guide/scriptorium.html && \
+    wget -O jet_guide.html https://jaded-encoding-thaumaturgy.github.io/JET-guide/ && \
+    wget -O silentaperture_guide.html https://silentaperture.gitlab.io/mdbook-guide && \
+    wget -O ie_wizardry_guide.html https://guide.encode.moe/encoding/preparation.html && \
+    wget -O x264_guide.html https://passthepopcorn.me/wiki.php?action=article&id=272
+
+# -----------------------------
+# Setup test folder & scripts
+# -----------------------------
 WORKDIR /home/user/test
-
-# Simple test.vpy script
-RUN echo 'import vapoursynth as vs\n\
-core = vs.core\n\
-clip = core.std.BlankClip(width=1280, height=720, length=240, fpsnum=24, fpsden=1, color=[128])\n\
-clip = core.text.Text(clip, "Hello VapourSynth in Docker!")\n\
-clip.set_output()' > test.vpy
-
-# Simple test Jupyter notebook
-RUN echo '{"cells":[{"cell_type":"code","metadata":{},"source":["!vspipe /home/user/test/test.vpy - | ffmpeg -y -i - -c:v libx264 -preset veryfast -crf 18 output.mp4"],"execution_count":null,"outputs":[]}],"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"}},"nbformat":4,"nbformat_minor":5}' > test_vapoursynth.ipynb
+RUN echo 'import vapoursynth as vs\ncore=vs.core\nclip=core.std.BlankClip(width=1280,height=720,length=240,fpsnum=24,fpsden=1,color=[128])\nclip.set_output()' > test.vpy
 
 # -----------------------------
 # Cleanup
@@ -86,7 +94,7 @@ RUN pacman -Scc --noconfirm && \
     rm -rf /tmp/* /root/.cache /home/user/.cache || true
 
 # -----------------------------
-# Expose Jupyter and run
+# Expose Jupyter and GUI (if needed)
 # -----------------------------
 WORKDIR /home/user
 EXPOSE 8888
