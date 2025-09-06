@@ -1,3 +1,6 @@
+# -----------------------------
+# Base image
+# -----------------------------
 FROM archlinux:latest
 
 # -----------------------------
@@ -5,8 +8,7 @@ FROM archlinux:latest
 # -----------------------------
 RUN pacman -Syu --needed --noconfirm \
         sudo git base-devel python python-pip ffms2 vim wget gcc \
-        vapoursynth ffmpeg x264 x265 lame flac opus-tools sox \
-        aacgain faac \
+        vapoursynth ffmpeg x264 x265 lame flac opus-tools sox faac \
     && pacman -Sc --noconfirm
 
 RUN useradd -m -d /home/user -s /bin/bash user \
@@ -49,21 +51,19 @@ RUN yay -Syu --overwrite "*" --needed --noconfirm \
     yay -Sc --noconfirm
 
 # -----------------------------
-# Install vs-jetpack, vs-muxtools, Deew, mkvtoolnix-gui
+# Install vs-jetpack and vs-muxtools via pip+git
 # -----------------------------
 USER root
-RUN pip install --no-cache-dir --break-system-packages git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git \
-    git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git \
-    yuuno jupyterlab
-
-RUN yay -S --noconfirm --needed \
-        deew-git \
-        mkvtoolnix-gui \
-        eac3to \
-        qaac
+RUN pip install --no-cache-dir --break-system-packages git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git
+RUN pip install --no-cache-dir --break-system-packages git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git
 
 # -----------------------------
-# Setup test VapourSynth script & notebook
+# Install Python packages (yuuno, JupyterLab)
+# -----------------------------
+RUN pip install --no-cache-dir --upgrade pip setuptools yuuno jupyterlab --break-system-packages
+
+# -----------------------------
+# Add test VapourSynth script & notebook
 # -----------------------------
 USER user
 WORKDIR /home/user/test
@@ -75,11 +75,11 @@ clip = core.std.BlankClip(width=1280, height=720, length=240, fpsnum=24, fpsden=
 clip = core.text.Text(clip, "Hello VapourSynth in Docker!")\n\
 clip.set_output()' > test.vpy
 
-# Simple Jupyter notebook to run the test script
+# Simple test Jupyter notebook
 RUN echo '{"cells":[{"cell_type":"code","metadata":{},"source":["!vspipe /home/user/test/test.vpy - | ffmpeg -y -i - -c:v libx264 -preset veryfast -crf 18 output.mp4"],"execution_count":null,"outputs":[]}],"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"}},"nbformat":4,"nbformat_minor":5}' > test_vapoursynth.ipynb
 
 # -----------------------------
-# Cleanup unnecessary files
+# Cleanup
 # -----------------------------
 USER root
 RUN pacman -Scc --noconfirm && \
