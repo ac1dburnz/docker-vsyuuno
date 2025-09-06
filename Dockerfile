@@ -1,10 +1,7 @@
-# -----------------------------
-# Base image
-# -----------------------------
 FROM archlinux:latest
 
 # -----------------------------
-# Update and install base packages
+# Base system + user
 # -----------------------------
 RUN pacman -Syu --needed --noconfirm \
         sudo git base-devel python python-pip ffms2 vim wget gcc \
@@ -12,9 +9,6 @@ RUN pacman -Syu --needed --noconfirm \
         mplayer mpv mkvtoolnix-gui \
     && pacman -Sc --noconfirm
 
-# -----------------------------
-# Create non-root user
-# -----------------------------
 RUN useradd -m -d /home/user -s /bin/bash user \
     && passwd --lock user \
     && echo "user ALL=(ALL) NOPASSWD: /usr/bin/pacman" > /etc/sudoers.d/allow_user_pacman \
@@ -24,17 +18,21 @@ USER user
 WORKDIR /tmp
 
 # -----------------------------
-# Install yay (AUR helper)
+# Install yay (AUR helper) with retries
 # -----------------------------
-RUN git clone https://aur.archlinux.org/yay.git /tmp/yay && \
+RUN set -e; \
+    for i in 1 2 3 4 5; do \
+        echo "Attempt $i to clone yay..."; \
+        git clone https://aur.archlinux.org/yay.git /tmp/yay && break || sleep 5; \
+    done; \
     cd /tmp/yay && \
     makepkg -si --noconfirm --noprogressbar && \
     cd /tmp && rm -rf /tmp/yay
 
 # -----------------------------
-# Install AUR packages
+# Install VapourSynth plugins from AUR
 # -----------------------------
-RUN yay -Syu --needed --noconfirm \
+RUN yay -Syu --overwrite "*" --needed --noconfirm \
         vapoursynth-plugin-bestsource-git \
         vapoursynth-plugin-mvtools-git \
         vapoursynth-plugin-removegrain-git \
@@ -51,60 +49,53 @@ RUN yay -Syu --needed --noconfirm \
         vapoursynth-plugin-misc-git \
         vapoursynth-plugin-ocr-git \
         vapoursynth-plugin-vivtc-git \
-        vapoursynth-plugin-lsmashsource-git \
-        deew \
-    && yay -Sc --noconfirm
+        vapoursynth-plugin-lsmashsource-git && \
+    yay -Sc --noconfirm
 
 # -----------------------------
-# Clone important repos
-# -----------------------------
-RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git /home/user/repos/vs-jetpack && \
-    git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git /home/user/repos/vs-muxtools && \
-    git clone https://github.com/Jaded-Encoding-Thaumaturgy/muxtools.git /home/user/repos/muxtools
-
-# -----------------------------
-# Install Python packages
+# Clone and install vs-jetpack, vs-muxtools, muxtools
 # -----------------------------
 USER root
-RUN pip install --no-cache-dir --upgrade pip setuptools --break-system-packages
-RUN pip install --no-cache-dir --break-system-packages \
-        /home/user/repos/vs-jetpack \
-        /home/user/repos/vs-muxtools \
-        /home/user/repos/muxtools \
-        yuuno jupyterlab
+RUN pip install --no-cache-dir --break-system-packages git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git
+RUN pip install --no-cache-dir --break-system-packages git+https://github.com/Jaded-Encoding-Thaumaturgy/muxtools.git
+RUN pip install --no-cache-dir --break-system-packages git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git
 
 # -----------------------------
-# Setup test VapourSynth script & notebook
+# Install Python packages (yuuno, JupyterLab)
+# -----------------------------
+RUN pip install --no-cache-dir --upgrade pip setuptools yuuno jupyterlab --break-system-packages
+
+# -----------------------------
+# Optional: clone encoding scripts & documentation repos
 # -----------------------------
 USER user
+WORKDIR /home/user/repos
+RUN git clone https://github.com/OpusGang/EncodeScripts.git || true
+RUN git clone https://github.com/Ichunjo/encode-scripts.git || true
+RUN git clone https://github.com/LightArrowsEXE/Encoding-Projects.git || true
+RUN git clone https://github.com/Beatrice-Raws/encode-scripts.git || true
+RUN git clone https://github.com/Setsugennoao/Encoding-Scripts.git || true
+RUN git clone https://github.com/RivenSkaye/Encoding-Progress.git || true
+RUN git clone https://github.com/Moelancholy/Encode-Scripts.git || true
+
+# -----------------------------
+# Add test VapourSynth script & notebook
+# -----------------------------
 WORKDIR /home/user/test
-RUN mkdir -p /home/user/test
+RUN echo 'import vapoursynth as vs\ncore = vs.core\nclip = core.std.BlankClip(width=1280,height=720,length=240,fpsnum=24,fpsden=1,color=[128])\nclip = core.text.Text(clip,"Hello VapourSynth in Docker!")\nclip.set_output()' > test.vpy
 
-# Simple test.vpy script
-RUN echo 'import vapoursynth as vs\n\
-core = vs.core\n\
-clip = core.std.BlankClip(width=1280, height=720, length=240, fpsnum=24, fpsden=1, color=[128])\n\
-clip = core.text.Text(clip, "Hello VapourSynth in Docker!")\n\
-clip.set_output()' > /home/user/test/test.vpy
-
-# Simple test Jupyter notebook
-RUN echo '{"cells":[{"cell_type":"code","metadata":{},"source":["!vspipe /home/user/test/test.vpy - | ffmpeg -y -i - -c:v libx264 -preset veryfast -crf 18 output.mp4"],"execution_count":null,"outputs":[]}],"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"}},"nbformat":4,"nbformat_minor":5}' > /home/user/test/test_vapoursynth.ipynb
+RUN echo '{"cells":[{"cell_type":"code","metadata":{},"source":["!vspipe /home/user/test/test.vpy - | ffmpeg -y -i - -c:v libx264 -preset veryfast -crf 18 output.mp4"],"execution_count":null,"outputs":[]}],"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"}},"nbformat":4,"nbformat_minor":5}' > test_vapoursynth.ipynb
 
 # -----------------------------
 # Cleanup
 # -----------------------------
 USER root
-RUN pacman -Scc --noconfirm && \
-    rm -rf /tmp/* /root/.cache /home/user/.cache
+RUN pacman -Scc --noconfirm && rm -rf /tmp/* /root/.cache /home/user/.cache || true
 
 # -----------------------------
-# Expose Jupyter and mkvtoolnix-gui
+# Expose Jupyter and start GUI tools
 # -----------------------------
-USER user
 WORKDIR /home/user
 EXPOSE 8888
-
-# -----------------------------
-# Launch Jupyter Lab & mkvtoolnix-gui (can be auto-launched)
-# -----------------------------
-CMD jupyter lab --allow-root --port=8888 --no-browser --ip=0.0.0.0 & mkvtoolnix-gui
+CMD jupyter lab --allow-root --port=8888 --no-browser --ip=0.0.0.0 & \
+    mkvtoolnix-gui
