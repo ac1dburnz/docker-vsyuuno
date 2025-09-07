@@ -10,6 +10,7 @@ RUN pacman -Syu --needed --noconfirm \
         sudo git base-devel python python-pip ffms2 wget gcc \
         vapoursynth ffmpeg x264 x265 lame flac opus-tools sox \
         mplayer mpv mkvtoolnix-cli unzip cabextract wine rust \
+        nano \
     && pacman -Sc --noconfirm
 
 # -----------------------------
