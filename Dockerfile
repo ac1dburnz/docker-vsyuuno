@@ -29,13 +29,15 @@ WORKDIR /
 # -----------------------------
 # Install yay (AUR helper)
 # -----------------------------
-RUN set -e; \
-    for i in 1 2 3 4 5; do \
-        echo "Attempt $i to clone yay..."; \
-        git clone https://aur.archlinux.org/yay.git /tmp/yay && break || sleep 5; \
-    done; \
-    cd /tmp/yay && makepkg -si --noconfirm --noprogressbar; \
-    cd /tmp && rm -rf /tmp/yay
+USER user
+WORKDIR /tmp
+RUN for i in 1 2 3 4 5; do \
+      git clone https://aur.archlinux.org/yay.git && break || sleep 5; \
+    done && \
+    cd yay && \
+    makepkg --noconfirm --noprogressbar -si && \
+    yay --afterclean --removemake --save && cd -
+
 
 # -----------------------------
 # Install VapourSynth plugins
