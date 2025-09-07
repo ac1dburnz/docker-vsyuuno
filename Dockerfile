@@ -9,8 +9,8 @@ FROM archlinux:latest
 RUN pacman -Syu --needed --noconfirm \
         sudo git base-devel python python-pip ffms2 vim wget gcc \
         vapoursynth ffmpeg x264 x265 lame flac opus-tools sox \
-        mplayer mpv mkvtoolnix-cli x11vnc xorg-server-xvfb \
-        vapoursynth-plugin-bestsource vapoursynth-plugin-mvtools \
+        mplayer mpv mkvtoolnix-cli mkvtoolnix-gui x11vnc xorg-server-xvfb \
+        unzip cabextract wine \
     && pacman -Sc --noconfirm
 
 # -----------------------------
@@ -69,6 +69,16 @@ RUN pip install --no-cache-dir --break-system-packages --upgrade \
         git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git \
         git+https://github.com/Jaded-Encoding-Thaumaturgy/muxtools.git \
         git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git
+
+# -----------------------------
+# Install eac3to (Windows) with Wine
+# -----------------------------
+RUN mkdir -p /opt/eac3to \
+    && wget -O /opt/eac3to/eac3to.zip https://www.videohelp.com/download/eac3to.zip \
+    && unzip /opt/eac3to/eac3to.zip -d /opt/eac3to \
+    && rm /opt/eac3to/eac3to.zip \
+    && echo '#!/bin/bash\nwine /opt/eac3to/eac3to.exe "$@"' > /usr/local/bin/eac3to \
+    && chmod +x /usr/local/bin/eac3to
 
 # -----------------------------
 # Optional: clone encoding scripts
