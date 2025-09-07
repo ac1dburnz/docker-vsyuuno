@@ -6,7 +6,7 @@ FROM archlinux:latest
 RUN pacman -Syu --needed --noconfirm \
         sudo git base-devel python python-pip ffms2 vim wget gcc \
         vapoursynth ffmpeg x264 x265 lame flac opus-tools sox \
-        mplayer mpv \
+        mplayer mpv mkvtoolnix-cli x11vnc xvfb novnc websockify \
     && pacman -Sc --noconfirm
 
 RUN useradd -m -d /home/user -s /bin/bash user \
@@ -87,14 +87,32 @@ RUN echo 'import vapoursynth as vs\ncore = vs.core\nclip = core.std.BlankClip(wi
 RUN echo '{"cells":[{"cell_type":"code","metadata":{},"source":["!vspipe /home/user/test/test.vpy - | ffmpeg -y -i - -c:v libx264 -preset veryfast -crf 18 output.mp4"],"execution_count":null,"outputs":[]}],"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"}},"nbformat":4,"nbformat_minor":5}' > test_vapoursynth.ipynb
 
 # -----------------------------
-# Cleanup
+# Setup Xvfb + x11vnc + noVNC
 # -----------------------------
 USER root
+RUN mkdir -p /opt/novnc/utils/websockify \
+    && git clone https://github.com/novnc/noVNC.git /opt/novnc \
+    && git clone https://github.com/novnc/websockify.git /opt/novnc/utils/websockify
+
+RUN echo '#!/bin/bash\n\
+export DISPLAY=:1\n\
+Xvfb :1 -screen 0 1920x1080x24 &\n\
+x11vnc -display :1 -nopw -forever -shared &\n\
+/opt/novnc/utils/launch.sh --vnc localhost:5900 &\n\
+exec "$@"' > /usr/local/bin/start-gui.sh && chmod +x /usr/local/bin/start-gui.sh
+
+# -----------------------------
+# Cleanup
+# -----------------------------
 RUN pacman -Scc --noconfirm && rm -rf /tmp/* /root/.cache /home/user/.cache || true
 
 # -----------------------------
-# Expose Jupyter and start GUI tools
+# Expose ports for Jupyter and GUI
 # -----------------------------
 WORKDIR /home/user
-EXPOSE 8888
-CMD jupyter lab --allow-root --port=8888 --no-browser --ip=0.0.0.0
+EXPOSE 8888 6080
+
+# -----------------------------
+# Default CMD
+# -----------------------------
+CMD ["bash", "-c", "/usr/local/bin/start-gui.sh && jupyter lab --allow-root --port=8888 --no-browser --ip=0.0.0.0"]
