@@ -9,7 +9,7 @@ FROM archlinux:latest
 RUN pacman -Syu --needed --noconfirm \
         sudo git base-devel python python-pip ffms2 vim wget gcc \
         vapoursynth ffmpeg x264 x265 lame flac opus-tools sox \
-        mplayer mpv mkvtoolnix-cli mkvtoolnix-gui x11vnc xorg-server-xvfb \
+        mplayer mpv mkvtoolnix-cli x11vnc xorg-server-xvfb \
         unzip cabextract wine \
     && pacman -Sc --noconfirm
 
