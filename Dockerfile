@@ -86,11 +86,12 @@ RUN pip install --no-cache-dir --upgrade pip --break-system-packages && \
 # -----------------------------
 RUN pip install --no-cache-dir jupyterlab --break-system-packages
 
-# -----------------------------
 # Install eac3to from local repo
 # -----------------------------
+# Make sure eac3to_3.52.rar is in the same folder as the Dockerfile
+COPY eac3to_3.52.rar /opt/eac3to/
+
 RUN mkdir -p /opt/eac3to \
-    && cp /repos/eac3to_3.52.rar /opt/eac3to/ \
     && unrar x /opt/eac3to/eac3to_3.52.rar /opt/eac3to/ \
     && rm /opt/eac3to/eac3to_3.52.rar \
     && echo '#!/bin/bash\nwine /opt/eac3to/eac3to.exe "$@"' > /usr/local/bin/eac3to \
