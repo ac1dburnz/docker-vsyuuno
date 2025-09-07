@@ -4,13 +4,12 @@
 FROM archlinux:latest
 
 # -----------------------------
-# System dependencies
+# Install system dependencies
 # -----------------------------
 RUN pacman -Syu --needed --noconfirm \
-        sudo git base-devel python python-pip ffms2 wget gcc \
+        sudo git base-devel python python-pip ffms2 vim wget gcc \
         vapoursynth ffmpeg x264 x265 lame flac opus-tools sox \
-        mplayer mpv mkvtoolnix-cli unzip cabextract wine rust \
-        nano \
+        mplayer mpv mkvtoolnix-cli unzip cabextract wine unrar \
     && pacman -Sc --noconfirm
 
 # -----------------------------
@@ -28,14 +27,15 @@ WORKDIR /tmp
 # Install yay (AUR helper)
 # -----------------------------
 RUN set -e; \
-    for i in 1 2 3; do \
+    for i in 1 2 3 4 5; do \
+        echo "Attempt $i to clone yay..."; \
         git clone https://aur.archlinux.org/yay.git /tmp/yay && break || sleep 5; \
     done; \
     cd /tmp/yay && makepkg -si --noconfirm --noprogressbar; \
     cd /tmp && rm -rf /tmp/yay
 
 # -----------------------------
-# VapourSynth plugins
+# Install VapourSynth plugins (AUR)
 # -----------------------------
 RUN yay -Syu --overwrite "*" --needed --noconfirm \
         vapoursynth-plugin-bestsource-git \
@@ -58,10 +58,12 @@ RUN yay -Syu --overwrite "*" --needed --noconfirm \
     && yay -Sc --noconfirm
 
 # -----------------------------
-# Python packages + deew
+# Switch to root for pip installs
 # -----------------------------
 USER root
-RUN pip install --no-cache-dir --break-system-packages --upgrade \
+
+RUN pacman -S --needed --noconfirm rust \
+    && pip install --no-cache-dir --break-system-packages --upgrade \
         pip setuptools \
         yuuno jupyterlab deew \
         git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git \
@@ -69,17 +71,17 @@ RUN pip install --no-cache-dir --break-system-packages --upgrade \
         git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git
 
 # -----------------------------
-# eac3to via Wine
+# Install eac3to via Wine
 # -----------------------------
 RUN mkdir -p /opt/eac3to \
-    && wget -O /opt/eac3to/eac3to.zip https://www.videohelp.com/download/eac3to.zip \
-    && unzip /opt/eac3to/eac3to.zip -d /opt/eac3to \
-    && rm /opt/eac3to/eac3to.zip \
+    && wget -O /opt/eac3to/eac3to.rar https://www.videohelp.com/download/eac3to_3.52.rar \
+    && unrar x /opt/eac3to/eac3to.rar /opt/eac3to/ \
+    && rm /opt/eac3to/eac3to.rar \
     && echo '#!/bin/bash\nwine /opt/eac3to/eac3to.exe "$@"' > /usr/local/bin/eac3to \
     && chmod +x /usr/local/bin/eac3to
 
 # -----------------------------
-# Optional encoding repos
+# Optional: clone encoding scripts
 # -----------------------------
 USER user
 WORKDIR /home/user/repos
@@ -91,11 +93,11 @@ RUN for repo in \
     https://github.com/Setsugennoao/Encoding-Scripts.git \
     https://github.com/RivenSkaye/Encoding-Progress.git \
     https://github.com/Moelancholy/Encode-Scripts.git; do \
-    https://github.com/Ichunjo/encode-scripts.git; do \
         git clone "$repo" || true; \
     done
+
 # -----------------------------
-# Test VapourSynth script & notebook
+# Add test VapourSynth script & notebook
 # -----------------------------
 WORKDIR /home/user/test
 RUN echo 'import vapoursynth as vs\ncore = vs.core\nclip = core.std.BlankClip(width=1280,height=720,length=240,fpsnum=24,fpsden=1,color=[128])\nclip = core.text.Text(clip,"Hello VapourSynth in Docker!")\nclip.set_output()' > test.vpy
@@ -108,7 +110,7 @@ RUN echo '{"cells":[{"cell_type":"code","metadata":{},"source":["!vspipe /home/u
 RUN pacman -Scc --noconfirm && rm -rf /tmp/* /root/.cache /home/user/.cache || true
 
 # -----------------------------
-# Working dir, ports, CMD
+# Set working dir, expose port, default CMD
 # -----------------------------
 WORKDIR /home/user
 EXPOSE 8888
