@@ -9,11 +9,11 @@ FROM archlinux:latest
 RUN pacman -Syu --needed --noconfirm \
         sudo git base-devel python python-pip ffms2 vim wget gcc \
         vapoursynth ffmpeg x264 x265 lame flac opus-tools sox \
-        mplayer mpv mkvtoolnix-cli unzip cabextract wine unrar \
+        mplayer mpv unzip cabextract wine unrar curl rust \
     && pacman -Sc --noconfirm
 
 # -----------------------------
-# Create non-root user
+# Create non-root user with sudo privileges
 # -----------------------------
 RUN useradd -m -d /home/user -s /bin/bash user \
     && passwd --lock user \
@@ -35,7 +35,7 @@ RUN set -e; \
     cd /tmp && rm -rf /tmp/yay
 
 # -----------------------------
-# Install VapourSynth plugins (AUR)
+# Install VapourSynth plugins
 # -----------------------------
 RUN yay -Syu --overwrite "*" --needed --noconfirm \
         vapoursynth-plugin-bestsource-git \
@@ -62,8 +62,7 @@ RUN yay -Syu --overwrite "*" --needed --noconfirm \
 # -----------------------------
 USER root
 
-RUN pacman -S --needed --noconfirm rust \
-    && pip install --no-cache-dir --break-system-packages --upgrade \
+RUN pip install --no-cache-dir --break-system-packages --upgrade \
         pip setuptools \
         yuuno jupyterlab deew \
         git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git \
@@ -71,10 +70,10 @@ RUN pacman -S --needed --noconfirm rust \
         git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git
 
 # -----------------------------
-# Install eac3to via Wine
+# Install eac3to (via Wine)
 # -----------------------------
 RUN mkdir -p /opt/eac3to \
-    && wget -O /opt/eac3to/eac3to.rar https://www.videohelp.com/download/eac3to_3.52.rar \
+    && curl -L "https://www.videohelp.com/download/eac3to_3.52.rar" -o /opt/eac3to/eac3to.rar \
     && unrar x /opt/eac3to/eac3to.rar /opt/eac3to/ \
     && rm /opt/eac3to/eac3to.rar \
     && echo '#!/bin/bash\nwine /opt/eac3to/eac3to.exe "$@"' > /usr/local/bin/eac3to \
@@ -110,7 +109,7 @@ RUN echo '{"cells":[{"cell_type":"code","metadata":{},"source":["!vspipe /home/u
 RUN pacman -Scc --noconfirm && rm -rf /tmp/* /root/.cache /home/user/.cache || true
 
 # -----------------------------
-# Set working dir, expose port, default CMD
+# Final settings
 # -----------------------------
 WORKDIR /home/user
 EXPOSE 8888
