@@ -103,7 +103,10 @@ WORKDIR /var/user
 # -----------------------------
 # Clone encoding scripts safely
 # -----------------------------
-RUN mkdir -p /repos && cd /repos && \
+USER root
+RUN mkdir -p /repos && chown user:user /repos
+USER user
+RUN cd /repos && \
     for repo in \
         https://github.com/OpusGang/EncodeScripts.git \
         https://github.com/Ichunjo/encode-scripts.git \
@@ -115,7 +118,6 @@ RUN mkdir -p /repos && cd /repos && \
         echo "Cloning $repo ..."; \
         git clone "$repo" || echo "Failed to clone $repo, skipping."; \
     done
-
 # -----------------------------
 # Add test VapourSynth script & notebook
 # -----------------------------
