@@ -74,7 +74,7 @@ RUN pip install --no-cache-dir --break-system-packages --upgrade \
 # Install eac3to from local repo
 # -----------------------------
 # Make sure eac3to_3.52.rar is in the same folder as the Dockerfile
-COPY eac3to_3.52.rar /opt/eac3to/
+COPY files/eac3to_3.52.rar /opt/eac3to/
 
 RUN mkdir -p /opt/eac3to \
     && unrar x /opt/eac3to/eac3to_3.52.rar /opt/eac3to/ \
