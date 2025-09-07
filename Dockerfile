@@ -9,7 +9,8 @@ FROM archlinux:latest
 RUN pacman -Syu --needed --noconfirm \
         sudo git base-devel python python-pip ffms2 vim wget gcc \
         vapoursynth ffmpeg x264 x265 lame flac opus-tools sox \
-        mplayer mpv unzip cabextract wine unrar curl rust \
+        mplayer mpv mkvtoolnix-cli x11vnc xorg-server-xvfb \
+        unzip cabextract wine unrar \
     && pacman -Sc --noconfirm
 
 # -----------------------------
@@ -58,10 +59,9 @@ RUN yay -Syu --overwrite "*" --needed --noconfirm \
     && yay -Sc --noconfirm
 
 # -----------------------------
-# Switch to root for pip installs
+# Install Python packages and VS tools
 # -----------------------------
 USER root
-
 RUN pip install --no-cache-dir --break-system-packages --upgrade \
         pip setuptools \
         yuuno jupyterlab deew \
@@ -70,11 +70,11 @@ RUN pip install --no-cache-dir --break-system-packages --upgrade \
         git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git
 
 # -----------------------------
-# Install eac3to (via Wine)
+# Install eac3to from local repo file
 # -----------------------------
-RUN mkdir -p /opt/eac3to \
-    && curl -L "https://www.videohelp.com/download/eac3to_3.52.rar" -o /opt/eac3to/eac3to.rar \
-    && unrar x /opt/eac3to/eac3to.rar /opt/eac3to/ \
+RUN mkdir -p /opt/eac3to
+COPY files/eac3to_3.52.rar /opt/eac3to/eac3to.rar
+RUN unrar x /opt/eac3to/eac3to.rar /opt/eac3to/ \
     && rm /opt/eac3to/eac3to.rar \
     && echo '#!/bin/bash\nwine /opt/eac3to/eac3to.exe "$@"' > /usr/local/bin/eac3to \
     && chmod +x /usr/local/bin/eac3to
@@ -104,12 +104,12 @@ RUN echo 'import vapoursynth as vs\ncore = vs.core\nclip = core.std.BlankClip(wi
 RUN echo '{"cells":[{"cell_type":"code","metadata":{},"source":["!vspipe /home/user/test/test.vpy - | ffmpeg -y -i - -c:v libx264 -preset veryfast -crf 18 output.mp4"],"execution_count":null,"outputs":[]}],"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"}},"nbformat":4,"nbformat_minor":5}' > test_vapoursynth.ipynb
 
 # -----------------------------
-# Cleanup
+# Cleanup temporary files
 # -----------------------------
 RUN pacman -Scc --noconfirm && rm -rf /tmp/* /root/.cache /home/user/.cache || true
 
 # -----------------------------
-# Final settings
+# Set working dir, expose port, default CMD
 # -----------------------------
 WORKDIR /home/user
 EXPOSE 8888
