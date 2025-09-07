@@ -97,5 +97,4 @@ RUN pacman -Scc --noconfirm && rm -rf /tmp/* /root/.cache /home/user/.cache || t
 # -----------------------------
 WORKDIR /home/user
 EXPOSE 8888
-CMD jupyter lab --allow-root --port=8888 --no-browser --ip=0.0.0.0 & \
-    mkvtoolnix-gui
+CMD jupyter lab --allow-root --port=8888 --no-browser --ip=0.0.0.0
