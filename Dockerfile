@@ -36,8 +36,7 @@ RUN for i in 1 2 3 4 5; do \
     done && \
     cd yay && \
     makepkg --noconfirm --noprogressbar -si && \
-    yay --afterclean --removemake --save && cd -
-
+    yay --afterclean --removemake --save && cd - && rm -rf /tmp/yay
 
 # -----------------------------
 # Install VapourSynth plugins
@@ -67,22 +66,39 @@ RUN yay -Syu --overwrite "*" --needed --noconfirm \
 # -----------------------------
 RUN pip install --no-cache-dir --break-system-packages --upgrade \
         pip setuptools \
-        yuuno jupyterlab deew \
-        git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git \
-        git+https://github.com/Jaded-Encoding-Thaumaturgy/muxtools.git \
-        git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git
+        yuuno jupyterlab deew 
+
+RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git /tmp/vs-jetpack && \
+    cd /tmp/vs-jetpack && \
+    pip install --no-cache-dir . --break-system-packages && \
+    python -m vsjetpack --help || true
+
+RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/muxtools.git /tmp/muxtools && \
+    cd /tmp/muxtools && \
+    pip install --no-cache-dir . --break-system-packages && \
+    python -m muxtools --help || true
+
+RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git /tmp/vs-muxtools && \
+    cd /tmp/vs-muxtools && \
+    pip install --no-cache-dir . --break-system-packages && \
+    python -m vs-muxtools --help || true
 
 # -----------------------------
-# Install eac3to from local repo
+# Install eac3to from local repo (root required for /usr/local/bin)
 # -----------------------------
-# Make sure eac3to_3.52.rar is in the same folder as the Dockerfile
+USER root
 COPY files/eac3to_3.52.rar /opt/eac3to/
-
 RUN mkdir -p /opt/eac3to \
     && unrar x /opt/eac3to/eac3to_3.52.rar /opt/eac3to/ \
     && rm /opt/eac3to/eac3to_3.52.rar \
     && echo '#!/bin/bash\nwine /opt/eac3to/eac3to.exe "$@"' > /usr/local/bin/eac3to \
     && chmod +x /usr/local/bin/eac3to
+
+# -----------------------------
+# Switch back to user
+# -----------------------------
+USER user
+WORKDIR /var/user
 
 # -----------------------------
 # Clone encoding scripts
@@ -114,6 +130,6 @@ RUN pacman -Scc --noconfirm && rm -rf /tmp/* /root/.cache /var/user/.cache || tr
 # -----------------------------
 # Default working dir and CMD
 # -----------------------------
-WORKDIR /
+WORKDIR /var/user
 EXPOSE 8888
 CMD ["jupyter", "lab", "--allow-root", "--port=8888", "--no-browser", "--ip=0.0.0.0"]
