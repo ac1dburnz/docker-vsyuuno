@@ -4,25 +4,25 @@
 FROM archlinux:latest
 
 # -----------------------------
-# Install system dependencies
+# Install essential system packages
 # -----------------------------
 RUN pacman -Syu --needed --noconfirm \
         sudo git base-devel python python-pip ffms2 vim wget gcc \
         vapoursynth ffmpeg x264 x265 lame flac opus-tools sox \
-        mplayer mpv mkvtoolnix-cli x11vnc xorg-server-xvfb \
-        unzip cabextract wine unrar \
+        mplayer mpv x11vnc xorg-server-xvfb unzip cabextract wine \
+        rust cargo \
     && pacman -Sc --noconfirm
 
 # -----------------------------
 # Create non-root user with sudo privileges
 # -----------------------------
-RUN useradd -m -d /home/user -s /bin/bash user \
+RUN useradd user --system --shell /bin/bash --create-home --home-dir /var/user \
     && passwd --lock user \
-    && echo "user ALL=(ALL) NOPASSWD: /usr/bin/pacman" > /etc/sudoers.d/allow_user_pacman \
-    && echo "root ALL=(ALL) CWD=* ALL" > /etc/sudoers.d/permissive_root_chdir
+    && echo "user ALL=(ALL) NOPASSWD: /usr/bin/pacman" > /etc/sudoers.d/allow_user_to_pacman \
+    && echo "root ALL=(ALL) CWD=* ALL" > /etc/sudoers.d/permissive_root_Chdir_Spec
 
 USER user
-WORKDIR /tmp
+WORKDIR /var/user
 
 # -----------------------------
 # Install yay (AUR helper)
@@ -59,9 +59,14 @@ RUN yay -Syu --overwrite "*" --needed --noconfirm \
     && yay -Sc --noconfirm
 
 # -----------------------------
-# Install Python packages and VS tools
+# Switch to root for system-wide pip installs
 # -----------------------------
 USER root
+WORKDIR /root
+
+# -----------------------------
+# Install Python packages
+# -----------------------------
 RUN pip install --no-cache-dir --break-system-packages --upgrade \
         pip setuptools \
         yuuno jupyterlab deew \
@@ -70,47 +75,52 @@ RUN pip install --no-cache-dir --break-system-packages --upgrade \
         git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git
 
 # -----------------------------
-# Install eac3to from local repo file
+# Install eac3to from local repo
 # -----------------------------
-RUN mkdir -p /opt/eac3to
-COPY files/eac3to_3.52.rar /opt/eac3to/eac3to.rar
-RUN unrar x /opt/eac3to/eac3to.rar /opt/eac3to/ \
-    && rm /opt/eac3to/eac3to.rar \
+RUN mkdir -p /opt/eac3to \
+    && cp /var/user/repos/eac3to_3.52.rar /opt/eac3to/ \
+    && unrar x /opt/eac3to/eac3to_3.52.rar /opt/eac3to/ \
+    && rm /opt/eac3to/eac3to_3.52.rar \
     && echo '#!/bin/bash\nwine /opt/eac3to/eac3to.exe "$@"' > /usr/local/bin/eac3to \
     && chmod +x /usr/local/bin/eac3to
 
 # -----------------------------
-# Optional: clone encoding scripts
+# Switch back to non-root user
 # -----------------------------
 USER user
-WORKDIR /home/user/repos
-RUN for repo in \
-    https://github.com/OpusGang/EncodeScripts.git \
-    https://github.com/Ichunjo/encode-scripts.git \
-    https://github.com/LightArrowsEXE/Encoding-Projects.git \
-    https://github.com/Beatrice-Raws/encode-scripts.git \
-    https://github.com/Setsugennoao/Encoding-Scripts.git \
-    https://github.com/RivenSkaye/Encoding-Progress.git \
-    https://github.com/Moelancholy/Encode-Scripts.git; do \
+WORKDIR /var/user
+
+# -----------------------------
+# Optional: clone encoding scripts
+# -----------------------------
+RUN mkdir -p repos && cd repos && \
+    for repo in \
+        https://github.com/OpusGang/EncodeScripts.git \
+        https://github.com/Ichunjo/encode-scripts.git \
+        https://github.com/LightArrowsEXE/Encoding-Projects.git \
+        https://github.com/Beatrice-Raws/encode-scripts.git \
+        https://github.com/Setsugennoao/Encoding-Scripts.git \
+        https://github.com/RivenSkaye/Encoding-Progress.git \
+        https://github.com/Moelancholy/Encode-Scripts.git; do \
         git clone "$repo" || true; \
     done
 
 # -----------------------------
 # Add test VapourSynth script & notebook
 # -----------------------------
-WORKDIR /home/user/test
+WORKDIR /var/user/test
 RUN echo 'import vapoursynth as vs\ncore = vs.core\nclip = core.std.BlankClip(width=1280,height=720,length=240,fpsnum=24,fpsden=1,color=[128])\nclip = core.text.Text(clip,"Hello VapourSynth in Docker!")\nclip.set_output()' > test.vpy
 
-RUN echo '{"cells":[{"cell_type":"code","metadata":{},"source":["!vspipe /home/user/test/test.vpy - | ffmpeg -y -i - -c:v libx264 -preset veryfast -crf 18 output.mp4"],"execution_count":null,"outputs":[]}],"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"}},"nbformat":4,"nbformat_minor":5}' > test_vapoursynth.ipynb
+RUN echo '{"cells":[{"cell_type":"code","metadata":{},"source":["!vspipe /var/user/test/test.vpy - | ffmpeg -y -i - -c:v libx264 -preset veryfast -crf 18 output.mp4"],"execution_count":null,"outputs":[]}],"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"}},"nbformat":4,"nbformat_minor":5}' > test_vapoursynth.ipynb
 
 # -----------------------------
-# Cleanup temporary files
+# Cleanup
 # -----------------------------
-RUN pacman -Scc --noconfirm && rm -rf /tmp/* /root/.cache /home/user/.cache || true
+RUN pacman -Scc --noconfirm && rm -rf /tmp/* /root/.cache /var/user/.cache || true
 
 # -----------------------------
-# Set working dir, expose port, default CMD
+# Default working dir and CMD
 # -----------------------------
-WORKDIR /home/user
+WORKDIR /var/user
 EXPOSE 8888
 CMD ["jupyter", "lab", "--allow-root", "--port=8888", "--no-browser", "--ip=0.0.0.0"]
