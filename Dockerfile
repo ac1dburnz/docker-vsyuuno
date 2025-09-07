@@ -6,86 +6,71 @@ FROM archlinux:latest
 # -----------------------------
 # Install essential system packages
 # -----------------------------
-RUN pacman -Syu --needed --noconfirm sudo
-RUN useradd user --system --shell /bin/bash --create-home --home-dir /var/user
-RUN passwd --lock user
-RUN echo "user ALL=(ALL) NOPASSWD: /usr/bin/pacman" > /etc/sudoers.d/allow_user_to_pacman
-RUN echo "root ALL=(ALL) CWD=* ALL" > /etc/sudoers.d/permissive_root_Chdir_Spec
+RUN pacman -Syu --needed --noconfirm \
+        sudo git base-devel python python-pip ffms2 vim wget gcc \
+        vapoursynth ffmpeg x264 x265 lame flac opus-tools sox \
+        mplayer mpv x11vnc xorg-server-xvfb unzip cabextract wine \
+        rust cargo unrar \
+    && pacman -Sc --noconfirm
 
-RUN pacman -Syu --needed --noprogressbar --noconfirm \
-        base-devel \
-        git \
-        gcc \
-        ffms2 \
-        vapoursynth \
-        vapoursynth-plugin-bestsource \
-        vapoursynth-plugin-mvtools \
-        python-pip \
-        vim \
-        wget && \
-    pacman -Sc --noconfirm
+# -----------------------------
+# Create system user (optional, not used)
+# -----------------------------
+RUN useradd user --system --shell /bin/bash --create-home --home-dir /var/user \
+    && passwd --lock user \
+    && echo "user ALL=(ALL) NOPASSWD: /usr/bin/pacman" > /etc/sudoers.d/allow_user_to_pacman \
+    && echo "root ALL=(ALL) CWD=* ALL" > /etc/sudoers.d/permissive_root_Chdir_Spec
+
+# -----------------------------
+# Working directory
+# -----------------------------
+WORKDIR /
 
 # -----------------------------
 # Install yay (AUR helper)
 # -----------------------------
-USER user
-WORKDIR /tmp
-RUN for i in 1 2 3 4 5; do \
-      git clone https://aur.archlinux.org/yay.git && break || sleep 5; \
-    done && \
-    cd yay && \
-    makepkg --noconfirm --noprogressbar -si && \
-    yay --afterclean --removemake --save && cd -
+RUN set -e; \
+    for i in 1 2 3 4 5; do \
+        echo "Attempt $i to clone yay..."; \
+        git clone https://aur.archlinux.org/yay.git /tmp/yay && break || sleep 5; \
+    done; \
+    cd /tmp/yay && makepkg -si --noconfirm --noprogressbar; \
+    cd /tmp && rm -rf /tmp/yay
 
 # -----------------------------
 # Install VapourSynth plugins
 # -----------------------------
-RUN yay -Syu --overwrite "*" --noconfirm --noprogressbar --needed \
-    vapoursynth-plugin-removegrain-git \
-    vapoursynth-plugin-rekt-git \
-    vapoursynth-plugin-remapframes-git \
-    vapoursynth-plugin-fillborders-git \
-    vapoursynth-plugin-havsfunc-git \
-    vapoursynth-plugin-awsmfunc-git \
-    vapoursynth-plugin-eedi3m-git \
-    vapoursynth-plugin-continuityfixer-git \
-    vapoursynth-plugin-d2vsource-git \
-    vapoursynth-plugin-subtext-git \
-    vapoursynth-plugin-imwri-git \
-    vapoursynth-plugin-misc-git \
-    vapoursynth-plugin-ocr-git \
-    vapoursynth-plugin-vivtc-git \
-    vapoursynth-plugin-lsmashsource-git && \
-    yay -Sc --noconfirm
+RUN yay -Syu --overwrite "*" --needed --noconfirm \
+        vapoursynth-plugin-bestsource-git \
+        vapoursynth-plugin-mvtools-git \
+        vapoursynth-plugin-removegrain-git \
+        vapoursynth-plugin-rekt-git \
+        vapoursynth-plugin-remapframes-git \
+        vapoursynth-plugin-fillborders-git \
+        vapoursynth-plugin-havsfunc-git \
+        vapoursynth-plugin-awsmfunc-git \
+        vapoursynth-plugin-eedi3m-git \
+        vapoursynth-plugin-continuityfixer-git \
+        vapoursynth-plugin-d2vsource-git \
+        vapoursynth-plugin-subtext-git \
+        vapoursynth-plugin-imwri-git \
+        vapoursynth-plugin-misc-git \
+        vapoursynth-plugin-ocr-git \
+        vapoursynth-plugin-vivtc-git \
+        vapoursynth-plugin-lsmashsource-git \
+    && yay -Sc --noconfirm
 
 # -----------------------------
-# Install vs-jetpack
+# Install Python packages
 # -----------------------------
-RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git /tmp/vs-jetpack && \
-    cd /tmp/vs-jetpack && \
-    pip install --no-cache-dir . --break-system-packages && \
-    python -m vsjetpack --help || true
+RUN pip install --no-cache-dir --break-system-packages --upgrade \
+        pip setuptools \
+        yuuno jupyterlab deew \
+        git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git \
+        git+https://github.com/Jaded-Encoding-Thaumaturgy/muxtools.git \
+        git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git
 
 # -----------------------------
-# Install vs-muxtools
-# -----------------------------
-RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git /tmp/vs-muxtools && \
-    cd /tmp/vs-muxtools/vsmuxtools && \
-    pip install --no-cache-dir . --break-system-packages && \
-    python -m vsmuxtools --help || true
-
-# -----------------------------
-# Install your Python project
-# -----------------------------
-USER root
-RUN pip install --no-cache-dir --upgrade pip --break-system-packages && \
-    pip install --no-cache-dir --upgrade yuuno setuptools --break-system-packages
-
-# -----------------------------
-# Install JupyterLab (if needed)
-# -----------------------------
-RUN pip install --no-cache-dir jupyterlab --break-system-packages
-
 # Install eac3to from local repo
 # -----------------------------
 # Make sure eac3to_3.52.rar is in the same folder as the Dockerfile
@@ -120,9 +105,9 @@ RUN mkdir -p /test && \
     echo '{"cells":[{"cell_type":"code","metadata":{},"source":["!vspipe /test/test.vpy - | ffmpeg -y -i - -c:v libx264 -preset veryfast -crf 18 output.mp4"],"execution_count":null,"outputs":[]}],"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"}},"nbformat":4,"nbformat_minor":5}' > /test/test_vapoursynth.ipynb
 
 # -----------------------------
-# Final cleanup
+# Cleanup
 # -----------------------------
-RUN pacman -Scc --noconfirm && rm -rf /tmp/* /root/.cache /home/user/.cache || true
+RUN pacman -Scc --noconfirm && rm -rf /tmp/* /root/.cache /var/user/.cache || true
 
 # -----------------------------
 # Default working dir and CMD
