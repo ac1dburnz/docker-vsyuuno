@@ -16,20 +16,19 @@ RUN pacman -Syu --needed --noconfirm \
     && pacman -Sc --noconfirm
 
 # -----------------------------
-# Create non-root user for builder
+# Create non-root user for yay (needed for AUR)
 # -----------------------------
 RUN useradd -m -s /bin/bash builder && \
     echo "builder ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/builder
 
-# Switch to builder for user installs
 USER builder
 WORKDIR /home/builder
 
 # -----------------------------
-# Install yay (AUR helper) as builder
+# Install yay (AUR helper)
 # -----------------------------
-RUN git clone https://aur.archlinux.org/yay.git /home/builder/yay && \
-    cd /home/builder/yay && makepkg -si --noconfirm && \
+RUN git clone https://aur.archlinux.org/yay.git && \
+    cd yay && makepkg --noconfirm --noprogressbar -si && \
     cd .. && rm -rf yay
 
 # -----------------------------
@@ -58,19 +57,19 @@ RUN yay -Syu --overwrite "*" --needed --noconfirm \
 # -----------------------------
 # Install Python packages
 # -----------------------------
-RUN pip install --user --no-cache-dir --break-system-packages --upgrade \
+RUN pip install --no-cache-dir --break-system-packages --upgrade \
         pip setuptools yuuno jupyterlab deew
 
 RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git /tmp/vs-jetpack && \
-    pip install --user --no-cache-dir /tmp/vs-jetpack --break-system-packages && \
+    pip install --no-cache-dir /tmp/vs-jetpack --break-system-packages && \
     rm -rf /tmp/vs-jetpack
 
 RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/muxtools.git /tmp/muxtools && \
-    pip install --user --no-cache-dir /tmp/muxtools --break-system-packages && \
+    pip install --no-cache-dir /tmp/muxtools --break-system-packages && \
     rm -rf /tmp/muxtools
 
 RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git /tmp/vs-muxtools && \
-    pip install --user --no-cache-dir /tmp/vs-muxtools --break-system-packages && \
+    pip install --no-cache-dir /tmp/vs-muxtools --break-system-packages && \
     rm -rf /tmp/vs-muxtools
 
 # -----------------------------
@@ -82,20 +81,18 @@ WORKDIR /
 # -----------------------------
 # Install eac3to from local repo
 # -----------------------------
-RUN mkdir -p /opt/eac3to
 COPY files/eac3to_3.52.rar /opt/eac3to/
-RUN unrar x /opt/eac3to/eac3to_3.52.rar /opt/eac3to/ && \
+RUN mkdir -p /opt/eac3to && \
+    unrar x /opt/eac3to/eac3to_3.52.rar /opt/eac3to/ && \
     rm /opt/eac3to/eac3to_3.52.rar && \
     echo '#!/bin/bash\nwine /opt/eac3to/eac3to.exe "$@"' > /usr/local/bin/eac3to && \
-    chmod +x /usr/local/bin/eac3to && \
-    chown -R builder:builder /opt/eac3to
+    chmod +x /usr/local/bin/eac3to
 
 # -----------------------------
-# Clone encoding repos
+# Clone encoding repos as builder
 # -----------------------------
-RUN mkdir -p /repos && chown builder:builder /repos
 USER builder
-WORKDIR /repos
+WORKDIR /home/builder/repos
 RUN for repo in \
         https://github.com/OpusGang/EncodeScripts.git \
         https://github.com/Ichunjo/encode-scripts.git \
@@ -111,9 +108,9 @@ RUN for repo in \
 # -----------------------------
 # Add test VapourSynth script & notebook
 # -----------------------------
-RUN mkdir -p /test && chown builder:builder /test && \
-    echo 'import vapoursynth as vs\ncore = vs.core\nclip = core.std.BlankClip(width=1280,height=720,length=240,fpsnum=24,fpsden=1,color=[128])\nclip = core.text.Text(clip,"Hello VapourSynth in Docker!")\nclip.set_output()' > /test/test.vpy && \
-    echo '{"cells":[{"cell_type":"code","metadata":{},"source":["!vspipe /test/test.vpy - | ffmpeg -y -i - -c:v libx264 -preset veryfast -crf 18 output.mp4"],"execution_count":null,"outputs":[]}],"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"}},"nbformat":4,"nbformat_minor":5}' > /test/test_vapoursynth.ipynb
+RUN mkdir -p /home/builder/test && \
+    echo 'import vapoursynth as vs\ncore = vs.core\nclip = core.std.BlankClip(width=1280,height=720,length=240,fpsnum=24,fpsden=1,color=[128])\nclip = core.text.Text(clip,"Hello VapourSynth in Docker!")\nclip.set_output()' > /home/builder/test/test.vpy && \
+    echo '{"cells":[{"cell_type":"code","metadata":{},"source":["!vspipe /home/builder/test/test.vpy - | ffmpeg -y -i - -c:v libx264 -preset veryfast -crf 18 output.mp4"],"execution_count":null,"outputs":[]}],"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"}},"nbformat":4,"nbformat_minor":5}' > /home/builder/test/test_vapoursynth.ipynb
 
 # -----------------------------
 # Cleanup
