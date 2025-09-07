@@ -101,7 +101,7 @@ USER user
 WORKDIR /var/user
 
 # -----------------------------
-# Clone encoding scripts
+# Clone encoding scripts safely
 # -----------------------------
 RUN mkdir -p /repos && cd /repos && \
     for repo in \
@@ -112,7 +112,8 @@ RUN mkdir -p /repos && cd /repos && \
         https://github.com/Setsugennoao/Encoding-Scripts.git \
         https://github.com/RivenSkaye/Encoding-Progress.git \
         https://github.com/Moelancholy/Encode-Scripts.git; do \
-        git clone "$repo" || true; \
+        echo "Cloning $repo ..."; \
+        git clone "$repo" || echo "Failed to clone $repo, skipping."; \
     done
 
 # -----------------------------
