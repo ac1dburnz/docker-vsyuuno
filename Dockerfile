@@ -84,10 +84,15 @@ USER user
 WORKDIR /home/user/repos
 RUN for repo in \
     https://github.com/OpusGang/EncodeScripts.git \
+    https://github.com/Ichunjo/encode-scripts.git \
+    https://github.com/LightArrowsEXE/Encoding-Projects.git \
+    https://github.com/Beatrice-Raws/encode-scripts.git \
+    https://github.com/Setsugennoao/Encoding-Scripts.git \
+    https://github.com/RivenSkaye/Encoding-Progress.git \
+    https://github.com/Moelancholy/Encode-Scripts.git; do \
     https://github.com/Ichunjo/encode-scripts.git; do \
         git clone "$repo" || true; \
     done
-
 # -----------------------------
 # Test VapourSynth script & notebook
 # -----------------------------
