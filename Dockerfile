@@ -6,7 +6,7 @@ FROM archlinux:latest
 RUN pacman -Syu --needed --noconfirm \
         sudo git base-devel python python-pip ffms2 vim wget gcc \
         vapoursynth ffmpeg x264 x265 lame flac opus-tools sox \
-        mplayer mpv mkvtoolnix-cli x11vnc xvfb novnc websockify \
+        mplayer mpv mkvtoolnix x11vnc xvfb \
     && pacman -Sc --noconfirm
 
 RUN useradd -m -d /home/user -s /bin/bash user \
@@ -49,16 +49,18 @@ RUN yay -Syu --overwrite "*" --needed --noconfirm \
         vapoursynth-plugin-misc-git \
         vapoursynth-plugin-ocr-git \
         vapoursynth-plugin-vivtc-git \
-        vapoursynth-plugin-lsmashsource-git && \
-    yay -Sc --noconfirm
+        vapoursynth-plugin-lsmashsource-git \
+        novnc websockify \
+    && yay -Sc --noconfirm
 
 # -----------------------------
 # Clone and install vs-jetpack, vs-muxtools, muxtools
 # -----------------------------
 USER root
-RUN pip install --no-cache-dir --break-system-packages git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git
-RUN pip install --no-cache-dir --break-system-packages git+https://github.com/Jaded-Encoding-Thaumaturgy/muxtools.git
-RUN pip install --no-cache-dir --break-system-packages git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git
+RUN pip install --no-cache-dir --break-system-packages \
+        git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git \
+        git+https://github.com/Jaded-Encoding-Thaumaturgy/muxtools.git \
+        git+https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git
 
 # -----------------------------
 # Install Python packages (yuuno, JupyterLab)
