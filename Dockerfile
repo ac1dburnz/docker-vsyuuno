@@ -3,39 +3,36 @@
 # -----------------------------
 FROM archlinux:latest
 
-ENV DEBIAN_FRONTEND=noninteractive
-ENV LANG=C.UTF-8
-
 # -----------------------------
-# Install essential packages
+# Update system and install essentials
 # -----------------------------
-RUN pacman -Syu --needed --noconfirm \
-        sudo git base-devel python python-pip ffms2 vim wget gcc \
+RUN pacman -Syu --needed --noconfirm sudo git base-devel python python-pip ffms2 vim wget gcc \
         vapoursynth ffmpeg x264 x265 lame flac opus-tools sox \
         mplayer mpv x11vnc xorg-server-xvfb unzip cabextract wine \
-        rust cargo unrar unrar \
+        rust cargo unrar \
     && pacman -Sc --noconfirm
 
 # -----------------------------
-# Create temporary user for yay (AUR)
+# Create non-root builder user for AUR (optional)
 # -----------------------------
-RUN useradd -m builder && \
+RUN useradd -m -s /bin/bash builder && \
     echo "builder ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/builder
 
 USER builder
 WORKDIR /home/builder
 
 # -----------------------------
-# Install yay (AUR helper)
+# Install yay (AUR helper) as builder
 # -----------------------------
-RUN git clone https://aur.archlinux.org/yay.git /tmp/yay && \
-    cd /tmp/yay && makepkg --noconfirm --noprogressbar -si && \
-    cd / && rm -rf /tmp/yay
+RUN git clone https://aur.archlinux.org/yay.git && \
+    cd yay && makepkg --noconfirm --noprogressbar -si && \
+    cd .. && rm -rf yay
 
 # -----------------------------
-# Install VapourSynth plugins via yay
+# Install VapourSynth plugins manually (avoids systemd issues) as builder
 # -----------------------------
-RUN yay -S --needed --noconfirm \
+RUN mkdir -p /tmp/aur && cd /tmp/aur && \
+    for pkg in \
         vapoursynth-plugin-bestsource-git \
         vapoursynth-plugin-mvtools-git \
         vapoursynth-plugin-removegrain-git \
@@ -52,41 +49,61 @@ RUN yay -S --needed --noconfirm \
         vapoursynth-plugin-misc-git \
         vapoursynth-plugin-ocr-git \
         vapoursynth-plugin-vivtc-git \
-        vapoursynth-plugin-lsmashsource-git \
-    && yay -Sc --noconfirm
+        vapoursynth-plugin-lsmashsource-git; do \
+        git clone https://aur.archlinux.org/$pkg.git || true; \
+        cd $pkg; \
+        makepkg --noconfirm -si || true; \
+        cd ..; \
+    done && rm -rf /tmp/aur
 
 # -----------------------------
-# Switch to root for system-wide installs
+# Switch to root for everything else
 # -----------------------------
 USER root
 WORKDIR /
 
 # -----------------------------
-# Install Python packages system-wide
+# Install Python packages (breakable)
 # -----------------------------
-RUN pip install --no-cache-dir --upgrade --break-system-packages pip setuptools yuuno jupyterlab deew
+RUN pip install --no-cache-dir --upgrade pip setuptools yuuno jupyterlab deew --break-system-packages
 
-# -----------------------------
-# Install vs-jetpack & vs-muxtools
-# -----------------------------
 RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git /tmp/vs-jetpack && \
     pip install --no-cache-dir /tmp/vs-jetpack --break-system-packages && \
     rm -rf /tmp/vs-jetpack
+
+RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/muxtools.git /tmp/muxtools && \
+    pip install --no-cache-dir /tmp/muxtools --break-system-packages && \
+    rm -rf /tmp/muxtools
 
 RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git /tmp/vs-muxtools && \
     pip install --no-cache-dir /tmp/vs-muxtools --break-system-packages && \
     rm -rf /tmp/vs-muxtools
 
 # -----------------------------
-# Install eac3to via Wine
+# Install eac3to via wget and Wine
 # -----------------------------
-# Must place files/eac3to_3.52.rar next to Dockerfile
-COPY files/eac3to_3.52.rar /opt/eac3to/
 RUN mkdir -p /opt/eac3to && \
+    wget -O /opt/eac3to/eac3to_3.52.rar "https://www.videohelp.com/download-wRsSRMSGlWHx/eac3to_3.52.rar" && \
     unrar x /opt/eac3to/eac3to_3.52.rar /opt/eac3to/ && \
     rm /opt/eac3to/eac3to_3.52.rar && \
     echo -e '#!/bin/bash\nwine /opt/eac3to/eac3to.exe "$@"' > /usr/local/bin/eac3to && \
     chmod +x /usr/local/bin/eac3to
+
+# -----------------------------
+# Clone encoding repos
+# -----------------------------
+RUN mkdir -p /repos && cd /repos && \
+    for repo in \
+        https://github.com/OpusGang/EncodeScripts.git \
+        https://github.com/Ichunjo/encode-scripts.git \
+        https://github.com/LightArrowsEXE/Encoding-Projects.git \
+        https://github.com/Beatrice-Raws/encode-scripts.git \
+        https://github.com/Setsugennoao/Encoding-Scripts.git \
+        https://github.com/RivenSkaye/Encoding-Progress.git \
+        https://github.com/Moelancholy/Encode-Scripts.git; do \
+        echo "Cloning $repo ..."; \
+        git clone "$repo" || echo "Failed to clone $repo, skipping."; \
+    done
 
 # -----------------------------
 # Add test VapourSynth script & notebook
@@ -103,6 +120,6 @@ RUN pacman -Scc --noconfirm && rm -rf /tmp/* /root/.cache /home/builder/.cache |
 # -----------------------------
 # Default working dir and CMD
 # -----------------------------
-WORKDIR /
+WORKDIR /home/builder
 EXPOSE 8888
 CMD ["jupyter", "lab", "--allow-root", "--port=8888", "--no-browser", "--ip=0.0.0.0"]
