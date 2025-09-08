@@ -64,7 +64,7 @@ WORKDIR /
 # -----------------------------
 # Install Python packages system-wide
 # -----------------------------
-RUN pip install --no-cache-dir --upgrade pip setuptools yuuno jupyterlab deew
+RUN pip install --no-cache-dir --upgrade --break-system-packages pip setuptools yuuno jupyterlab deew
 
 # -----------------------------
 # Install vs-jetpack & vs-muxtools
