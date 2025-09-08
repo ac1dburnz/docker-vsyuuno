@@ -80,13 +80,23 @@ RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git /tmp
     rm -rf /tmp/vs-muxtools
 
 # -----------------------------
-# Install eac3to via wget and Wine
+# Install eac3to via wget and Wine with full Xvfb wrapper
 # -----------------------------
 RUN mkdir -p /opt/eac3to && \
     wget -O /opt/eac3to/eac3to_3.52.rar "https://www.videohelp.com/download-wRsSRMSGlWHx/eac3to_3.52.rar" && \
     unrar x /opt/eac3to/eac3to_3.52.rar /opt/eac3to/ && \
     rm /opt/eac3to/eac3to_3.52.rar && \
-    echo -e '#!/bin/bash\nwine /opt/eac3to/eac3to.exe "$@"' > /usr/local/bin/eac3to && \
+    echo -e '#!/bin/bash\n\
+export DISPLAY=:99\n\
+export WINEDEBUG=-all\n\
+export WINEDLLOVERRIDES="mscoree,mshtml="\n\
+Xvfb :99 -screen 0 1024x768x16 &\n\
+XVFB_PID=$!\n\
+sleep 2\n\
+wine /opt/eac3to/eac3to.exe "$@"\n\
+STATUS=$?\n\
+kill $XVFB_PID\n\
+exit $STATUS' > /usr/local/bin/eac3to && \
     chmod +x /usr/local/bin/eac3to
 
 # -----------------------------
