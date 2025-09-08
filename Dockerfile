@@ -8,12 +8,13 @@ FROM archlinux:latest
 # -----------------------------
 RUN pacman -Syu --needed --noconfirm sudo git base-devel python python-pip ffms2 vim wget gcc \
         vapoursynth ffmpeg x264 x265 lame flac opus-tools sox \
-        mplayer mpv x11vnc xorg-server-xvfb unzip cabextract wine \
+        mplayer mpv x11vnc xorg-server-xvfb unzip cabextract wine wine-mono wine-gecko \
+        lib32-libpng lib32-alsa-lib lib32-libjpeg-turbo \
         rust cargo unrar \
     && pacman -Sc --noconfirm
 
 # -----------------------------
-# Create non-root builder user for AUR (optional)
+# Create non-root builder user for AUR
 # -----------------------------
 RUN useradd -m -s /bin/bash builder && \
     echo "builder ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/builder
@@ -29,7 +30,7 @@ RUN git clone https://aur.archlinux.org/yay.git && \
     cd .. && rm -rf yay
 
 # -----------------------------
-# Install VapourSynth plugins manually (avoids systemd issues) as builder
+# Install VapourSynth plugins manually
 # -----------------------------
 RUN mkdir -p /tmp/aur && cd /tmp/aur && \
     for pkg in \
@@ -57,13 +58,13 @@ RUN mkdir -p /tmp/aur && cd /tmp/aur && \
     done && rm -rf /tmp/aur
 
 # -----------------------------
-# Switch to root for everything else
+# Switch to root for remaining installs
 # -----------------------------
 USER root
 WORKDIR /
 
 # -----------------------------
-# Install Python packages (breakable)
+# Install Python packages
 # -----------------------------
 RUN pip install --no-cache-dir --upgrade pip setuptools yuuno jupyterlab deew --break-system-packages
 
@@ -80,23 +81,13 @@ RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git /tmp
     rm -rf /tmp/vs-muxtools
 
 # -----------------------------
-# Install eac3to via wget and Wine with full Xvfb wrapper
+# Install eac3to via wget and Wine with xvfb-run wrapper
 # -----------------------------
 RUN mkdir -p /opt/eac3to && \
     wget -O /opt/eac3to/eac3to_3.52.rar "https://www.videohelp.com/download-wRsSRMSGlWHx/eac3to_3.52.rar" && \
     unrar x /opt/eac3to/eac3to_3.52.rar /opt/eac3to/ && \
     rm /opt/eac3to/eac3to_3.52.rar && \
-    echo -e '#!/bin/bash\n\
-export DISPLAY=:99\n\
-export WINEDEBUG=-all\n\
-export WINEDLLOVERRIDES="mscoree,mshtml="\n\
-Xvfb :99 -screen 0 1024x768x16 &\n\
-XVFB_PID=$!\n\
-sleep 2\n\
-wine /opt/eac3to/eac3to.exe "$@"\n\
-STATUS=$?\n\
-kill $XVFB_PID\n\
-exit $STATUS' > /usr/local/bin/eac3to && \
+    echo -e '#!/bin/bash\nxvfb-run -a wine /opt/eac3to/eac3to.exe "$@"' > /usr/local/bin/eac3to && \
     chmod +x /usr/local/bin/eac3to
 
 # -----------------------------
