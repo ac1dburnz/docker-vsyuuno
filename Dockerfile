@@ -87,8 +87,12 @@ RUN mkdir -p /opt/eac3to && \
     wget -O /opt/eac3to/eac3to_3.52.rar "https://www.videohelp.com/download-wRsSRMSGlWHx/eac3to_3.52.rar" && \
     unrar x /opt/eac3to/eac3to_3.52.rar /opt/eac3to/ && \
     rm /opt/eac3to/eac3to_3.52.rar && \
-    echo -e '#!/bin/bash\nxvfb-run -a wine /opt/eac3to/eac3to.exe "$@"' > /usr/local/bin/eac3to && \
+    echo -e '#!/bin/bash\nexec xvfb-run -a wine /opt/eac3to/eac3to.exe "$@"' > /usr/local/bin/eac3to && \
     chmod +x /usr/local/bin/eac3to
+
+# Pre-initialize Wine prefix for builder user
+USER builder
+RUN xvfb-run -a winecfg || true
 
 # -----------------------------
 # Clone encoding repos
@@ -116,11 +120,14 @@ RUN mkdir -p /test && \
 # -----------------------------
 # Cleanup
 # -----------------------------
+USER root
 RUN pacman -Scc --noconfirm && rm -rf /tmp/* /root/.cache /home/builder/.cache || true
 
 # -----------------------------
 # Default working dir and CMD
 # -----------------------------
+USER builder
 WORKDIR /home/builder
 EXPOSE 8888
 CMD ["jupyter", "lab", "--allow-root", "--port=8888", "--no-browser", "--ip=0.0.0.0"]
+
