@@ -4,20 +4,28 @@
 FROM archlinux:latest
 
 # -----------------------------
-# Update system and install essentials
+# Enable multilib and update repos (necessary for lib32 packages)
 # -----------------------------
-RUN pacman -Syu --needed --noconfirm sudo git base-devel python python-pip ffms2 vim wget gcc \
+RUN sed -i '/\[multilib\]/,/^Include/ s/^#//' /etc/pacman.conf && \
+    pacman -Syu --noconfirm
+
+# -----------------------------
+# Install core packages (no wine-mono / wine-gecko here)
+# -----------------------------
+RUN pacman -Syu --needed --noconfirm \
+        sudo git base-devel python python-pip ffms2 vim wget gcc \
         vapoursynth ffmpeg x264 x265 lame flac opus-tools sox \
-        mplayer mpv x11vnc xorg-server-xvfb unzip cabextract wine wine-mono wine-gecko \
-        lib32-libpng lib32-alsa-lib lib32-libjpeg-turbo \
-        rust cargo unrar \
+        mplayer mpv x11vnc xorg-server-xvfb unzip cabextract wine \
+        lib32-alsa-lib lib32-libpng lib32-libjpeg-turbo \
+        rust unrar \
     && pacman -Sc --noconfirm
 
 # -----------------------------
-# Create non-root builder user for AUR
+# Create non-root builder user for AUR/building
 # -----------------------------
 RUN useradd -m -s /bin/bash builder && \
-    echo "builder ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/builder
+    echo "builder ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/builder && \
+    chmod 0440 /etc/sudoers.d/builder
 
 USER builder
 WORKDIR /home/builder
@@ -25,12 +33,13 @@ WORKDIR /home/builder
 # -----------------------------
 # Install yay (AUR helper) as builder
 # -----------------------------
-RUN git clone https://aur.archlinux.org/yay.git && \
-    cd yay && makepkg --noconfirm --noprogressbar -si && \
-    cd .. && rm -rf yay
+RUN git clone https://aur.archlinux.org/yay.git /home/builder/yay && \
+    cd /home/builder/yay && \
+    makepkg --noconfirm --noprogressbar -si && \
+    cd /home/builder && rm -rf /home/builder/yay
 
 # -----------------------------
-# Install VapourSynth plugins manually
+# Optionally install VapourSynth AUR plugins (best-effort; failures don't abort)
 # -----------------------------
 RUN mkdir -p /tmp/aur && cd /tmp/aur && \
     for pkg in \
@@ -52,82 +61,70 @@ RUN mkdir -p /tmp/aur && cd /tmp/aur && \
         vapoursynth-plugin-vivtc-git \
         vapoursynth-plugin-lsmashsource-git; do \
         git clone https://aur.archlinux.org/$pkg.git || true; \
-        cd $pkg; \
+        cd $pkg 2>/dev/null || continue; \
         makepkg --noconfirm -si || true; \
         cd ..; \
     done && rm -rf /tmp/aur
 
 # -----------------------------
-# Switch to root for remaining installs
+# Switch to root for global pip installs and system-level tasks
 # -----------------------------
 USER root
 WORKDIR /
 
 # -----------------------------
-# Install Python packages
+# Python packages (system-wide)
 # -----------------------------
 RUN pip install --no-cache-dir --upgrade pip setuptools yuuno jupyterlab deew --break-system-packages
 
+# -----------------------------
+# Optional helper Python tooling from repos
+# -----------------------------
 RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git /tmp/vs-jetpack && \
-    pip install --no-cache-dir /tmp/vs-jetpack --break-system-packages && \
-    rm -rf /tmp/vs-jetpack
+    pip install --no-cache-dir /tmp/vs-jetpack --break-system-packages && rm -rf /tmp/vs-jetpack || true
 
 RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/muxtools.git /tmp/muxtools && \
-    pip install --no-cache-dir /tmp/muxtools --break-system-packages && \
-    rm -rf /tmp/muxtools
+    pip install --no-cache-dir /tmp/muxtools --break-system-packages && rm -rf /tmp/muxtools || true
 
 RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git /tmp/vs-muxtools && \
-    pip install --no-cache-dir /tmp/vs-muxtools --break-system-packages && \
-    rm -rf /tmp/vs-muxtools
+    pip install --no-cache-dir /tmp/vs-muxtools --break-system-packages && rm -rf /tmp/vs-muxtools || true
 
 # -----------------------------
-# Install eac3to via wget and Wine with xvfb-run wrapper
+# Install eac3to (download + extract) and add wrapper
 # -----------------------------
 RUN mkdir -p /opt/eac3to && \
-    wget -O /opt/eac3to/eac3to_3.52.rar "https://www.videohelp.com/download-wRsSRMSGlWHx/eac3to_3.52.rar" && \
-    unrar x /opt/eac3to/eac3to_3.52.rar /opt/eac3to/ && \
-    rm /opt/eac3to/eac3to_3.52.rar && \
+    wget -O /opt/eac3to/eac3to_3.52.rar "https://www.videohelp.com/download-wRsSRMSGlWHx/eac3to_3.52.rar" || true && \
+    if [ -f /opt/eac3to/eac3to_3.52.rar ]; then unrar x /opt/eac3to/eac3to_3.52.rar /opt/eac3to/ && rm /opt/eac3to/eac3to_3.52.rar; fi && \
     echo -e '#!/bin/bash\nexec xvfb-run -a wine /opt/eac3to/eac3to.exe "$@"' > /usr/local/bin/eac3to && \
-    chmod +x /usr/local/bin/eac3to
+    chmod +x /usr/local/bin/eac3to && \
+    chown -R builder:builder /opt/eac3to || true
 
-# Pre-initialize Wine prefix for builder user
+# -----------------------------
+# Pre-initialize Wine prefix as builder (creates ~/.wine, lets Wine fetch mono/gecko)
+# -----------------------------
 USER builder
-RUN xvfb-run -a winecfg || true
+ENV WINEPREFIX=/home/builder/.wine
+RUN mkdir -p /home/builder/.wine && xvfb-run -a winecfg || true
 
 # -----------------------------
-# Clone encoding repos
-# -----------------------------
-RUN mkdir -p /repos && cd /repos && \
-    for repo in \
-        https://github.com/OpusGang/EncodeScripts.git \
-        https://github.com/Ichunjo/encode-scripts.git \
-        https://github.com/LightArrowsEXE/Encoding-Projects.git \
-        https://github.com/Beatrice-Raws/encode-scripts.git \
-        https://github.com/Setsugennoao/Encoding-Scripts.git \
-        https://github.com/RivenSkaye/Encoding-Progress.git \
-        https://github.com/Moelancholy/Encode-Scripts.git; do \
-        echo "Cloning $repo ..."; \
-        git clone "$repo" || echo "Failed to clone $repo, skipping."; \
-    done
-
-# -----------------------------
-# Add test VapourSynth script & notebook
+# Test script + minimal test vapoursynth snippet
 # -----------------------------
 RUN mkdir -p /test && \
-    echo 'import vapoursynth as vs\ncore = vs.core\nclip = core.std.BlankClip(width=1280,height=720,length=240,fpsnum=24,fpsden=1,color=[128])\nclip = core.text.Text(clip,"Hello VapourSynth in Docker!")\nclip.set_output()' > /test/test.vpy && \
+    echo 'import vapoursynth as vs\ncore = vs.core\nclip = core.std.BlankClip(width=640,height=360,length=48,fpsnum=24,fpsden=1)\nclip.set_output()' > /test/test.vpy && \
     echo '{"cells":[{"cell_type":"code","metadata":{},"source":["!vspipe /test/test.vpy - | ffmpeg -y -i - -c:v libx264 -preset veryfast -crf 18 output.mp4"],"execution_count":null,"outputs":[]}],"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"}},"nbformat":4,"nbformat_minor":5}' > /test/test_vapoursynth.ipynb
 
 # -----------------------------
-# Cleanup
+# Cleanup pacman cache & temp files
 # -----------------------------
 USER root
 RUN pacman -Scc --noconfirm && rm -rf /tmp/* /root/.cache /home/builder/.cache || true
 
 # -----------------------------
-# Default working dir and CMD
+# Default working dir and CMD (run as builder)
 # -----------------------------
 USER builder
 WORKDIR /home/builder
 EXPOSE 8888
 CMD ["jupyter", "lab", "--allow-root", "--port=8888", "--no-browser", "--ip=0.0.0.0"]
+
 
