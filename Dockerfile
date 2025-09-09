@@ -4,13 +4,15 @@
 FROM archlinux:latest
 
 # -----------------------------
-# Enable multilib and update repos (necessary for lib32 packages)
+# Ensure multilib is enabled (robustly) and update repos
 # -----------------------------
-RUN sed -i '/\[multilib\]/,/^Include/ s/^#//' /etc/pacman.conf && \
+RUN if ! grep -q '^\[multilib\]' /etc/pacman.conf; then \
+      printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >> /etc/pacman.conf; \
+    fi && \
     pacman -Syu --noconfirm
 
 # -----------------------------
-# Install core packages (no wine-mono / wine-gecko here)
+# Install core packages (no explicit wine-mono / wine-gecko)
 # -----------------------------
 RUN pacman -Syu --needed --noconfirm \
         sudo git base-devel python python-pip ffms2 vim wget gcc \
