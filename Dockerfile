@@ -240,11 +240,14 @@ RUN chmod +x /usr/local/bin/eac3to-test
 # Test script + minimal test vapoursynth snippet
 # -----------------------------
 RUN mkdir -p /test && \
-    echo 'import vapoursynth as vs
+    cat << 'EOF' > /test/test.vpy
+import vapoursynth as vs
 core = vs.core
-clip = core.std.BlankClip(width=640,height=360,length=48,fpsnum=24,fpsden=1)
-clip.set_output()' > /test/test.vpy && \
-    cat << 'EOF' > /test/test_vapoursynth.ipynb
+clip = core.std.BlankClip(width=640, height=360, length=48, fpsnum=24, fpsden=1)
+clip.set_output()
+EOF
+
+RUN cat << 'EOF' > /test/test_vapoursynth.ipynb
 {
   "cells": [
     {
@@ -268,6 +271,7 @@ clip.set_output()' > /test/test.vpy && \
   "nbformat_minor": 5
 }
 EOF
+
 
 # -----------------------------
 # Cleanup pacman cache & temp files
