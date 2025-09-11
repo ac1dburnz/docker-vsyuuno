@@ -267,8 +267,8 @@ RUN for repo in \
 # -----------------------------
 # Default working dir and CMD (run as builder)
 # -----------------------------
-USER builder
-WORKDIR /home/builder
+USER root
+WORKDIR /
 EXPOSE 8888
 CMD ["jupyter", "lab", "--allow-root", "--port=8888", "--no-browser", "--ip=0.0.0.0"]
 
