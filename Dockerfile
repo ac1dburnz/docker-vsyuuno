@@ -243,8 +243,26 @@ RUN pacman -Scc --noconfirm || true && rm -rf /tmp/* /root/.cache /home/builder/
 # -----------------------------
 # Fix Jupyter runtime/data directory permissions
 # -----------------------------
-RUN mkdir -p /home/builder/.local/share/jupyter /home/builder/.local/share/jupyter/runtime \
-    && chown -R builder:builder /home/builder/.local
+RUN mkdir -p /root/.local/share/jupyter/runtime /root/.local/share/jupyter/lab
+
+# -----------------------------
+# Clone encoding repos as builder
+# -----------------------------
+USER builder
+WORKDIR /home/builder/repos
+RUN for repo in \
+        https://github.com/OpusGang/EncodeScripts.git \
+        https://github.com/Ichunjo/encode-scripts.git \
+        https://github.com/LightArrowsEXE/Encoding-Projects.git \
+        https://github.com/Beatrice-Raws/encode-scripts.git \
+        https://github.com/Setsugennoao/Encoding-Scripts.git \
+        https://github.com/RivenSkaye/Encoding-Progress.git \
+        https://github.com/Moelancholy/Encode-Scripts.git; do \
+        echo "Cloning $repo ..."; \
+        git clone "$repo" || echo "Failed to clone $repo, skipping."; \
+    done
+
+
 
 # -----------------------------
 # Default working dir and CMD (run as builder)
