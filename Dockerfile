@@ -32,6 +32,19 @@ RUN useradd -m -s /bin/bash builder && \
 USER builder
 WORKDIR /home/builder
 
+
+# -----------------------------
+# Fix permissions and Jupyter runtime dirs
+# -----------------------------
+RUN mkdir -p /home/builder/.local /home/builder/.cache /home/builder/.config \
+    && chown -R builder:builder /home/builder \
+    && mkdir -p /tmp/jupyter_runtime /tmp/jupyter_config /tmp/jupyter_data
+
+ENV JUPYTER_RUNTIME_DIR=/tmp/jupyter_runtime
+ENV JUPYTER_CONFIG_DIR=/tmp/jupyter_config
+ENV JUPYTER_DATA_DIR=/tmp/jupyter_data
+
+
 # -----------------------------
 # Install yay (AUR helper) as builder
 # -----------------------------
