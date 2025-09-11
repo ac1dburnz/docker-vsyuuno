@@ -249,8 +249,8 @@ RUN mkdir -p /home/builder/.local/share/jupyter /home/builder/.local/share/jupyt
 # -----------------------------
 # Default working dir and CMD (run as builder)
 # -----------------------------
-USER builder
-WORKDIR /home/builder
+USER root
+WORKDIR /
 EXPOSE 8888
 CMD ["jupyter", "lab", "--allow-root", "--port=8888", "--no-browser", "--ip=0.0.0.0"]
 
