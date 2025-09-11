@@ -235,6 +235,25 @@ RUN mkdir -p /test && \
     echo -e 'import vapoursynth as vs\ncore = vs.core\nclip = core.std.BlankClip(width=640,height=360,length=48,fpsnum=24,fpsden=1)\nclip.set_output()' > /test/test.vpy && \
     echo '{"cells":[{"cell_type":"code","metadata":{},"source":["!vspipe /test/test.vpy - | ffmpeg -y -i - -c:v libx264 -preset veryfast -crf 18 output.mp4"],"execution_count":null,"outputs":[]}],"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"}},"nbformat":4,"nbformat_minor":5}' > /test/test_vapoursynth.ipynb
 
+RUN mkdir -p /home/builder/repos
+# -----------------------------
+# Clone encoding repos as builder
+# -----------------------------
+WORKDIR /home/builder/repos
+RUN for repo in \
+        https://github.com/OpusGang/EncodeScripts.git \
+        https://github.com/Ichunjo/encode-scripts.git \
+        https://github.com/LightArrowsEXE/Encoding-Projects.git \
+        https://github.com/Beatrice-Raws/encode-scripts.git \
+        https://github.com/Setsugennoao/Encoding-Scripts.git \
+        https://github.com/RivenSkaye/Encoding-Progress.git \
+        https://github.com/Moelancholy/Encode-Scripts.git; do \
+        echo "Cloning $repo ..."; \
+        git clone "$repo" || echo "Failed to clone $repo, skipping."; \
+    done
+
+
+
 # -----------------------------
 # Cleanup pacman cache & temp files
 # -----------------------------
