@@ -134,39 +134,131 @@ RUN mkdir -p /opt/eac3to && \
 # Create the fixed wrapper script
 # -----------------------------
 RUN cat > /usr/local/bin/eac3to << 'EOFSCRIPT'
-#!/bin/bash
-# eac3to wrapper with proper argument handling
+#!/usr/bin/env bash
+set -euo pipefail
 
-# Setup environment
+# -----------------------------
+# Default Wine environment
+# -----------------------------
 export WINEDEBUG=-all
 export WINEDLLOVERRIDES="mscoree,mshtml="
-export WINEPREFIX="${WINEPREFIX:-$HOME/.wine}"
+export WINEPREFIX="${WINEPREFIX:-/root/.wine-eac3to}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-$(id -u)}"
-mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null
-chmod 700 "$XDG_RUNTIME_DIR" 2>/dev/null
+mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null || true
+chmod 700 "$XDG_RUNTIME_DIR" 2>/dev/null || true
 
+# -----------------------------
 # Check for eac3to
-if [ ! -f /opt/eac3to/eac3to.exe ]; then
-    echo "ERROR: eac3to.exe not found!"
-    echo "To fix: docker cp eac3to.exe CONTAINER:/opt/eac3to/"
+# -----------------------------
+if [ ! -f /windows-apps/eac3to.exe ]; then
+    echo "ERROR: /windows-apps/eac3to.exe not found! Copy it into the container." >&2
     exit 1
 fi
 
-# Setup display
+# -----------------------------
+# Setup virtual display
+# -----------------------------
 export DISPLAY=:99
-if ! pgrep -f "Xvfb :99" > /dev/null; then
+if ! pgrep -f "Xvfb :99" >/dev/null 2>&1; then
     Xvfb :99 -screen 0 1024x768x16 -nolisten tcp &>/dev/null &
     XVFB_PID=$!
+    trap 'kill ${XVFB_PID} 2>/dev/null || true' EXIT
     sleep 1
-    trap "kill $XVFB_PID 2>/dev/null" EXIT
 fi
 
-# Run eac3to - filter out Wine errors but keep eac3to output
-wine /opt/eac3to/eac3to.exe "$@" 2>&1 | \
-    grep -v "^[0-9A-Fa-f]*:err:" | \
-    grep -v "^[0-9A-Fa-f]*:fixme:" | \
-    grep -v "XDG_RUNTIME_DIR"
-exit ${PIPESTATUS[0]}
+# -----------------------------
+# Collect and debug args
+# -----------------------------
+args=( "$@" )
+
+echo "=== DEBUG INFO ===" >&2
+echo "Number of arguments: ${#args[@]}" >&2
+echo "Raw arguments (\$@): $*" >&2
+echo "Arguments array:" >&2
+for i in "${!args[@]}"; do
+    printf "  [%s]: '%s'\n" "$i" "${args[$i]}" >&2
+done
+echo "==================" >&2
+
+# -----------------------------
+# Playlist only → list playlists
+# -----------------------------
+if [ "${#args[@]}" -eq 2 ] && [[ "${args[1]}" =~ ^[0-9]+\)$ ]]; then
+    echo "Playlist '${args[1]}' given with no output files — listing playlists." >&2
+    cd /windows-apps
+    wine ./eac3to.exe "${args[0]}"
+    exit $?
+fi
+
+# -----------------------------
+# Merge track tokens: 3: + /path → 3:/path
+# -----------------------------
+merged=()
+i=0
+len=${#args[@]}
+while [ $i -lt $len ]; do
+    a="${args[$i]}"
+    if [[ "$a" =~ ^[0-9]+:$ ]] && [ $((i+1)) -lt $len ]; then
+        nxt="${args[$((i+1))]}"
+        merged+=( "${a}${nxt}" )
+        i=$((i+2))
+        continue
+    fi
+    merged+=( "$a" )
+    i=$((i+1))
+done
+
+# -----------------------------
+# Convert POSIX paths to Windows paths
+# -----------------------------
+converted=()
+for a in "${merged[@]}"; do
+    if [[ "$a" =~ ^([0-9]+):(.*) ]]; then
+        track="${BASH_REMATCH[1]}"
+        pathpart="${BASH_REMATCH[2]}"
+        if [[ "$pathpart" == /* ]]; then
+            w="$(winepath -w "$pathpart" 2>/dev/null || true)"
+            if [ -n "$w" ]; then
+                converted+=( "${track}:${w}" )
+            else
+                converted+=( "${track}:${pathpart}" )
+            fi
+        else
+            converted+=( "$a" )
+        fi
+    else
+        if [[ "$a" == /* ]]; then
+            w="$(winepath -w "$a" 2>/dev/null || true)"
+            if [ -n "$w" ]; then
+                converted+=( "$w" )
+            else
+                converted+=( "$a" )
+            fi
+        else
+            converted+=( "$a" )
+        fi
+    fi
+done
+
+# -----------------------------
+# Show final command
+# -----------------------------
+printf 'About to execute:\nwine /windows-apps/eac3to.exe' >&2
+for c in "${converted[@]}"; do
+    printf ' %q' "$c" >&2
+done
+printf '\n' >&2
+
+# -----------------------------
+# Run eac3to and filter Wine noise
+# -----------------------------
+cd /windows-apps
+wine ./eac3to.exe "${converted[@]}" 2>&1 | \
+    grep -v -E '^[0-9A-Fa-f]+:err:|^[0-9A-Fa-f]+:fixme:' || true
+
+EXIT_CODE=${PIPESTATUS[0]:-0}
+exit $EXIT_CODE
+
 EOFSCRIPT
 
 RUN chmod +x /usr/local/bin/eac3to
