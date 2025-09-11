@@ -20,7 +20,7 @@ RUN pacman -Syu --needed --noconfirm \
         mplayer mpv x11vnc xorg-server-xvfb unzip cabextract wine \
         lib32-alsa-lib lib32-libpng lib32-libjpeg-turbo \
         rust unrar \
-    && pacman -Sc --noconfirm || true
+    && pacman -Sc --noconfirm
 
 # -----------------------------
 # Create non-root builder user for AUR/building
@@ -82,10 +82,14 @@ RUN pip install --no-cache-dir --upgrade pip setuptools yuuno jupyterlab deew --
 # -----------------------------
 # Optional helper Python tooling from repos
 # -----------------------------
-RUN for repo in vs-jetpack muxtools vs-muxtools; do \
-    git clone https://github.com/Jaded-Encoding-Thaumaturgy/$repo.git /tmp/$repo && \
-    pip install --no-cache-dir /tmp/$repo --break-system-packages && rm -rf /tmp/$repo || true; \
-done
+RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-jetpack.git /tmp/vs-jetpack && \
+    pip install --no-cache-dir /tmp/vs-jetpack --break-system-packages && rm -rf /tmp/vs-jetpack || true
+
+RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/muxtools.git /tmp/muxtools && \
+    pip install --no-cache-dir /tmp/muxtools --break-system-packages && rm -rf /tmp/muxtools || true
+
+RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git /tmp/vs-muxtools && \
+    pip install --no-cache-dir /tmp/vs-muxtools --break-system-packages && rm -rf /tmp/vs-muxtools || true
 
 # -----------------------------
 # Setup Wine environment properly
@@ -94,14 +98,15 @@ ENV WINEDEBUG=-all
 ENV WINEDLLOVERRIDES="mscoree,mshtml="
 ENV XDG_RUNTIME_DIR=/tmp/runtime-root
 
+# Initialize Wine prefix without hanging
 RUN mkdir -p /tmp/runtime-root && \
     chmod 700 /tmp/runtime-root && \
-    Xvfb :99 -screen 0 1024x768x16 -nolisten tcp & \
+    Xvfb :99 -screen 0 1024x768x16 -nolisten tcp &>/dev/null & \
     XVFB_PID=$! && \
     export DISPLAY=:99 && \
     sleep 2 && \
-    timeout 15 winecfg /v win7 || true && \
-    kill $XVFB_PID || true
+    timeout 10 winecfg /v win7 2>/dev/null || true && \
+    kill $XVFB_PID 2>/dev/null || true
 
 # -----------------------------
 # Install eac3to manually (since wget gets HTML page)
@@ -125,20 +130,39 @@ export WINEDEBUG=-all
 export WINEDLLOVERRIDES="mscoree,mshtml="
 export WINEPREFIX="${WINEPREFIX:-/root/.wine-eac3to}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-$(id -u)}"
-mkdir -p "$XDG_RUNTIME_DIR" || true
-chmod 700 "$XDG_RUNTIME_DIR" || true
+mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null || true
+chmod 700 "$XDG_RUNTIME_DIR" 2>/dev/null || true
+
 if [ ! -f /windows-apps/eac3to.exe ]; then
-    echo "ERROR: /windows-apps/eac3to.exe not found!" >&2
+    echo "ERROR: /windows-apps/eac3to.exe not found! Copy it into the container." >&2
     exit 1
 fi
+
 export DISPLAY=:99
-if ! pgrep -f "Xvfb :99" >/dev/null; then
+if ! pgrep -f "Xvfb :99" >/dev/null 2>&1; then
     Xvfb :99 -screen 0 1024x768x16 -nolisten tcp &>/dev/null &
     XVFB_PID=$!
     trap 'kill ${XVFB_PID} 2>/dev/null || true' EXIT
     sleep 1
 fi
+
 args=( "$@" )
+
+echo "=== DEBUG INFO ===" >&2
+echo "Number of arguments: ${#args[@]}" >&2
+echo "Raw arguments (\$@): $*" >&2
+for i in "${!args[@]}"; do
+    printf "  [%s]: '%s'\n" "$i" "${args[$i]}" >&2
+done
+echo "==================" >&2
+
+if [ "${#args[@]}" -eq 2 ] && [[ "${args[1]}" =~ ^[0-9]+\)$ ]]; then
+    echo "Playlist '${args[1]}' given with no output files — listing playlists." >&2
+    cd /windows-apps
+    wine ./eac3to.exe "${args[0]}"
+    exit $?
+fi
+
 merged=()
 i=0
 len=${#args[@]}
@@ -153,6 +177,7 @@ while [ $i -lt $len ]; do
     merged+=( "$a" )
     i=$((i+1))
 done
+
 converted=()
 for a in "${merged[@]}"; do
     if [[ "$a" =~ ^([0-9]+):(.*) ]]; then
@@ -173,9 +198,20 @@ for a in "${merged[@]}"; do
         fi
     fi
 done
+
+printf 'About to execute:\nwine /windows-apps/eac3to.exe' >&2
+for c in "${converted[@]}"; do
+    printf ' %q' "$c" >&2
+done
+printf '\n' >&2
+
 cd /windows-apps
-wine ./eac3to.exe "${converted[@]}" 2>&1 | grep -v -E '^[0-9A-Fa-f]+:err:|^[0-9A-Fa-f]+:fixme:' || true
-EOF
+wine ./eac3to.exe "${converted[@]}" 2>&1 | \
+    grep -v -E '^[0-9A-Fa-f]+:err:|^[0-9A-Fa-f]+:fixme:' || true
+
+EXIT_CODE=${PIPESTATUS[0]:-0}
+exit $EXIT_CODE
+EOFSCRIPT
 
 RUN chmod +x /usr/local/bin/eac3to
 
@@ -204,12 +240,39 @@ RUN chmod +x /usr/local/bin/eac3to-test
 # Test script + minimal test vapoursynth snippet
 # -----------------------------
 RUN mkdir -p /test && \
-    echo 'import vapoursynth as vs\ncore = vs.core\nclip = core.std.BlankClip(width=640,height=360,length=48,fpsnum=24,fpsden=1)\nclip.set_output()' > /test/test.vpy && \
-    echo '{"cells":[{"cell_type":"code","metadata":{},"source":["!vspipe /test/test.vpy - | ffmpeg -y -i - -c:v libx264 -preset veryfast -crf 18 output.mp4"],"execution_count":null,"outputs":[]}],"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"}},"nbformat":4,"nbformat_minor":5}' > /test/test_vapoursynth.ipynb
+    echo 'import vapoursynth as vs
+core = vs.core
+clip = core.std.BlankClip(width=640,height=360,length=48,fpsnum=24,fpsden=1)
+clip.set_output()' > /test/test.vpy && \
+    cat << 'EOF' > /test/test_vapoursynth.ipynb
+{
+  "cells": [
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "!vspipe /test/test.vpy - | ffmpeg -y -i - -c:v libx264 -preset veryfast -crf 18 output.mp4"
+      ],
+      "execution_count": null,
+      "outputs": []
+    }
+  ],
+  "metadata": {
+    "kernelspec": {
+      "display_name": "Python 3",
+      "language": "python",
+      "name": "python3"
+    }
+  },
+  "nbformat": 4,
+  "nbformat_minor": 5
+}
+EOF
 
 # -----------------------------
 # Cleanup pacman cache & temp files
 # -----------------------------
+USER root
 RUN pacman -Scc --noconfirm || true && rm -rf /tmp/* /root/.cache /home/builder/.cache || true
 
 # -----------------------------
@@ -219,6 +282,7 @@ USER builder
 WORKDIR /home/builder
 EXPOSE 8888
 CMD ["jupyter", "lab", "--allow-root", "--port=8888", "--no-browser", "--ip=0.0.0.0"]
+
 
 
 
