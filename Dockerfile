@@ -29,17 +29,6 @@ RUN useradd -m -s /bin/bash builder && \
     echo "builder ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/builder && \
     chmod 0440 /etc/sudoers.d/builder
 
-# -----------------------------
-# Fix permissions and Jupyter runtime dirs
-# -----------------------------
-RUN mkdir -p /home/builder/.local /home/builder/.cache /home/builder/.config \
-    && chown -R builder:builder /home/builder \
-    && mkdir -p /tmp/jupyter_runtime /tmp/jupyter_config /tmp/jupyter_data
-
-ENV JUPYTER_RUNTIME_DIR=/tmp/jupyter_runtime
-ENV JUPYTER_CONFIG_DIR=/tmp/jupyter_config
-ENV JUPYTER_DATA_DIR=/tmp/jupyter_data
-
 USER builder
 WORKDIR /home/builder
 
@@ -109,6 +98,7 @@ ENV WINEDEBUG=-all
 ENV WINEDLLOVERRIDES="mscoree,mshtml="
 ENV XDG_RUNTIME_DIR=/tmp/runtime-root
 
+# Initialize Wine prefix without hanging
 RUN mkdir -p /tmp/runtime-root && \
     chmod 700 /tmp/runtime-root && \
     Xvfb :99 -screen 0 1024x768x16 -nolisten tcp &>/dev/null & \
@@ -119,14 +109,14 @@ RUN mkdir -p /tmp/runtime-root && \
     kill $XVFB_PID 2>/dev/null || true
 
 # -----------------------------
-# Install eac3to manually
+# Install eac3to (Option 1 + Option 2 combined)
 # -----------------------------
-RUN mkdir -p /opt/eac3to && \
-    cd /opt/eac3to && \
-    wget -O eac3to.rar "https://www.videohelp.com/download-wRsSRMSGlWHx/eac3to_3.52.rar" 2>/dev/null || \
-    echo "Download failed. Please manually add eac3to files to /opt/eac3to/" && \
-    if [ -f eac3to.rar ]; then \
-        unrar x eac3to.rar 2>/dev/null || echo "Extraction failed"; \
+RUN mkdir -p /opt/eac3to && cd /opt/eac3to && \
+    if [ -f /tmp/eac3to_3.52.rar ]; then \
+        unrar x /tmp/eac3to_3.52.rar && rm -f /tmp/eac3to_3.52.rar; \
+    else \
+        wget -O eac3to.rar "https://www.videohelp.com/download-wRsSRMSGlWHx/eac3to_3.52.rar" 2>/dev/null || echo "Download failed. Please manually add eac3to files to /opt/eac3to/"; \
+        [ -f eac3to.rar ] && unrar x eac3to.rar 2>/dev/null || echo "Extraction failed"; \
         rm -f eac3to.rar; \
     fi
 
@@ -135,7 +125,71 @@ RUN mkdir -p /opt/eac3to && \
 # -----------------------------
 RUN cat > /usr/local/bin/eac3to << 'EOFSCRIPT'
 #!/usr/bin/env bash
-# ... your full eac3to wrapper script here ...
+set -euo pipefail
+export WINEDEBUG=-all
+export WINEDLLOVERRIDES="mscoree,mshtml="
+export WINEPREFIX="${WINEPREFIX:-/root/.wine-eac3to}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-$(id -u)}"
+mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null || true
+chmod 700 "$XDG_RUNTIME_DIR" 2>/dev/null || true
+if [ ! -f /windows-apps/eac3to.exe ]; then
+    echo "ERROR: /windows-apps/eac3to.exe not found! Copy it into the container." >&2
+    exit 1
+fi
+export DISPLAY=:99
+if ! pgrep -f "Xvfb :99" >/dev/null 2>&1; then
+    Xvfb :99 -screen 0 1024x768x16 -nolisten tcp &>/dev/null &
+    XVFB_PID=$!
+    trap 'kill ${XVFB_PID} 2>/dev/null || true' EXIT
+    sleep 1
+fi
+args=( "$@" )
+merged=()
+i=0
+len=${#args[@]}
+while [ $i -lt $len ]; do
+    a="${args[$i]}"
+    if [[ "$a" =~ ^[0-9]+:$ ]] && [ $((i+1)) -lt $len ]; then
+        nxt="${args[$((i+1))]}"
+        merged+=( "${a}${nxt}" )
+        i=$((i+2))
+        continue
+    fi
+    merged+=( "$a" )
+    i=$((i+1))
+done
+converted=()
+for a in "${merged[@]}"; do
+    if [[ "$a" =~ ^([0-9]+):(.*) ]]; then
+        track="${BASH_REMATCH[1]}"
+        pathpart="${BASH_REMATCH[2]}"
+        if [[ "$pathpart" == /* ]]; then
+            w="$(winepath -w "$pathpart" 2>/dev/null || true)"
+            if [ -n "$w" ]; then
+                converted+=( "${track}:${w}" )
+            else
+                converted+=( "${track}:${pathpart}" )
+            fi
+        else
+            converted+=( "$a" )
+        fi
+    else
+        if [[ "$a" == /* ]]; then
+            w="$(winepath -w "$a" 2>/dev/null || true)"
+            if [ -n "$w" ]; then
+                converted+=( "$w" )
+            else
+                converted+=( "$a" )
+            fi
+        else
+            converted+=( "$a" )
+        fi
+    fi
+done
+cd /windows-apps
+wine ./eac3to.exe "${converted[@]}" 2>&1 | grep -v -E '^[0-9A-Fa-f]+:err:|^[0-9A-Fa-f]+:fixme:' || true
+EXIT_CODE=${PIPESTATUS[0]:-0}
+exit $EXIT_CODE
 EOFSCRIPT
 
 RUN chmod +x /usr/local/bin/eac3to
@@ -162,7 +216,7 @@ EOFTEST
 RUN chmod +x /usr/local/bin/eac3to-test
 
 # -----------------------------
-# Test script + minimal VapourSynth snippet
+# Test script + minimal test vapoursynth snippet
 # -----------------------------
 RUN mkdir -p /test && \
     echo -e 'import vapoursynth as vs\ncore = vs.core\nclip = core.std.BlankClip(width=640,height=360,length=48,fpsnum=24,fpsden=1)\nclip.set_output()' > /test/test.vpy && \
@@ -171,8 +225,13 @@ RUN mkdir -p /test && \
 # -----------------------------
 # Cleanup pacman cache & temp files
 # -----------------------------
-USER root
 RUN pacman -Scc --noconfirm || true && rm -rf /tmp/* /root/.cache /home/builder/.cache || true
+
+# -----------------------------
+# Fix Jupyter runtime/data directory permissions
+# -----------------------------
+RUN mkdir -p /home/builder/.local/share/jupyter /home/builder/.local/share/jupyter/runtime \
+    && chown -R builder:builder /home/builder/.local
 
 # -----------------------------
 # Default working dir and CMD (run as builder)
@@ -181,7 +240,6 @@ USER builder
 WORKDIR /home/builder
 EXPOSE 8888
 CMD ["jupyter", "lab", "--allow-root", "--port=8888", "--no-browser", "--ip=0.0.0.0"]
-
 
 
 
