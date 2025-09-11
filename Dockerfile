@@ -92,21 +92,105 @@ RUN git clone https://github.com/Jaded-Encoding-Thaumaturgy/vs-muxtools.git /tmp
     pip install --no-cache-dir /tmp/vs-muxtools --break-system-packages && rm -rf /tmp/vs-muxtools || true
 
 # -----------------------------
-# Install eac3to (download + extract) and add wrapper
+# Setup Wine environment properly
 # -----------------------------
-RUN mkdir -p /opt/eac3to && \
-    wget -O /opt/eac3to/eac3to_3.52.rar "https://www.videohelp.com/download-wRsSRMSGlWHx/eac3to_3.52.rar" || true && \
-    if [ -f /opt/eac3to/eac3to_3.52.rar ]; then unrar x /opt/eac3to/eac3to_3.52.rar /opt/eac3to/ && rm /opt/eac3to/eac3to_3.52.rar; fi && \
-    echo -e '#!/bin/bash\nexec xvfb-run -a wine /opt/eac3to/eac3to.exe "$@"' > /usr/local/bin/eac3to && \
-    chmod +x /usr/local/bin/eac3to && \
-    chown -R builder:builder /opt/eac3to || true
+ENV WINEDEBUG=-all
+ENV WINEDLLOVERRIDES="mscoree,mshtml="
+ENV XDG_RUNTIME_DIR=/tmp/runtime-root
+
+# Initialize Wine prefix without hanging
+RUN mkdir -p /tmp/runtime-root && \
+    chmod 700 /tmp/runtime-root && \
+    Xvfb :99 -screen 0 1024x768x16 -nolisten tcp &>/dev/null & \
+    XVFB_PID=$! && \
+    export DISPLAY=:99 && \
+    sleep 2 && \
+    timeout 10 winecfg /v win7 2>/dev/null || true && \
+    kill $XVFB_PID 2>/dev/null || true
 
 # -----------------------------
-# Pre-initialize Wine prefix as builder (creates ~/.wine, lets Wine fetch mono/gecko)
+# Install eac3to manually (since wget gets HTML page)
 # -----------------------------
-USER builder
-ENV WINEPREFIX=/home/builder/.wine
-RUN mkdir -p /home/builder/.wine && xvfb-run -a winecfg || true
+# Option 1: If you have eac3to_3.52.rar in your build context:
+# COPY eac3to_3.52.rar /tmp/
+# RUN mkdir -p /opt/eac3to && \
+#     cd /opt/eac3to && \
+#     unrar x /tmp/eac3to_3.52.rar && \
+#     rm /tmp/eac3to_3.52.rar
+
+# Option 2: Download from a mirror (if available)
+RUN mkdir -p /opt/eac3to && \
+    cd /opt/eac3to && \
+    # Try to download - this will likely fail due to VideoHelp restrictions
+    wget -O eac3to.rar "https://www.videohelp.com/download-wRsSRMSGlWHx/eac3to_3.52.rar" 2>/dev/null || \
+    echo "Download failed. Please manually add eac3to files to /opt/eac3to/" && \
+    # Try to extract if we got something
+    if [ -f eac3to.rar ]; then \
+        unrar x eac3to.rar 2>/dev/null || echo "Extraction failed"; \
+        rm -f eac3to.rar; \
+    fi
+
+# -----------------------------
+# Create the fixed wrapper script
+# -----------------------------
+RUN cat > /usr/local/bin/eac3to << 'EOFSCRIPT'
+#!/bin/bash
+# eac3to wrapper with proper argument handling
+
+# Setup environment
+export WINEDEBUG=-all
+export WINEDLLOVERRIDES="mscoree,mshtml="
+export WINEPREFIX="${WINEPREFIX:-$HOME/.wine}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-$(id -u)}"
+mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null
+chmod 700 "$XDG_RUNTIME_DIR" 2>/dev/null
+
+# Check for eac3to
+if [ ! -f /opt/eac3to/eac3to.exe ]; then
+    echo "ERROR: eac3to.exe not found!"
+    echo "To fix: docker cp eac3to.exe CONTAINER:/opt/eac3to/"
+    exit 1
+fi
+
+# Setup display
+export DISPLAY=:99
+if ! pgrep -f "Xvfb :99" > /dev/null; then
+    Xvfb :99 -screen 0 1024x768x16 -nolisten tcp &>/dev/null &
+    XVFB_PID=$!
+    sleep 1
+    trap "kill $XVFB_PID 2>/dev/null" EXIT
+fi
+
+# Run eac3to - filter out Wine errors but keep eac3to output
+wine /opt/eac3to/eac3to.exe "$@" 2>&1 | \
+    grep -v "^[0-9A-Fa-f]*:err:" | \
+    grep -v "^[0-9A-Fa-f]*:fixme:" | \
+    grep -v "XDG_RUNTIME_DIR"
+exit ${PIPESTATUS[0]}
+EOFSCRIPT
+
+RUN chmod +x /usr/local/bin/eac3to
+
+# -----------------------------
+# Create helper script for testing
+# -----------------------------
+RUN cat > /usr/local/bin/eac3to-test << 'EOFTEST'
+#!/bin/bash
+echo "Testing eac3to with various argument formats..."
+echo ""
+echo "Test 1: Simple help"
+eac3to -h 2>/dev/null | head -5
+echo ""
+echo "Test 2: Version info"
+eac3to 2>/dev/null | head -2
+echo ""
+echo "To test with a file:"
+echo '  eac3to "input.mkv"'
+echo '  eac3to "input.mkv" 1)'
+echo '  eac3to input.mkv "1)" output.mkv'
+EOFTEST
+
+RUN chmod +x /usr/local/bin/eac3to-test
 
 # -----------------------------
 # Test script + minimal test vapoursynth snippet
